@@ -1,0 +1,33 @@
+
+> nextjs-anchor@0.0.0 setup
+> npm run anchor-build && npm run codama:js
+
+
+> nextjs-anchor@0.0.0 anchor-build
+> cd anchor && anchor build
+
+Updating program ids...
+Syncing program ids for the configured cluster (devnet)
+
+Found incorrect program id declaration in "/Users/tayelroy/Coding/Interpretooor/Interpretooor/anchor/programs/vault/src/lib.rs"
+Updated to 9f14RJZJtiQchjZqvcAmxXNZrpju81bPtHC7c9tcqAqF
+
+Found incorrect program id declaration in Anchor.toml for the program `vault`
+Updated to 9f14RJZJtiQchjZqvcAmxXNZrpju81bPtHC7c9tcqAqF
+
+All program id declarations are synced.
+Please rebuild the program to update the generated artifacts.
+
+WARNING: `anchor-lang` version(0.32.1) and the current CLI version(1.0.2) don't match.
+
+	This can lead to unwanted behavior. To use the same CLI version, add:
+
+	[toolchain]
+	anchor_version = "0.32.1"
+
+	to Anchor.toml
+
+error: no such command: `build-sbf`
+
+help: view all installed commands with `cargo --list`
+help: find a package to install `build-sbf` with `cargo search cargo-build-sbf`
