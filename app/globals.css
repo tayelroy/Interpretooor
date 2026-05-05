@@ -1,0 +1,66 @@
+@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..800;1,400..800&family=Be+Vietnam+Pro:ital,wght@0,100..900;1,100..900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "EB Garamond", ui-serif, Georgia, serif;
+
+  --color-parchment: #ffffeb;
+  --color-ink: #1a1a1a;
+  --color-forest-canopy: #034f46;
+  --color-pale-lavender: #f0d7ff;
+  --color-stone: #e4e4d0;
+  --color-charcoal-text: #222222;
+  --color-muted-ash: #8a8a80;
+  --color-sunburst: #ffa946;
+
+  --radius-soft-card: 32px;
+  --radius-primary-btn: 12px;
+}
+
+@layer base {
+  body {
+    @apply bg-parchment text-ink font-sans selection:bg-pale-lavender selection:text-ink;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-serif italic;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-ink/10 rounded-full hover:bg-ink/20 transition-colors;
+}
+
+html.lenis {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+.lenis.lenis-scrolling iframe {
+  pointer-events: none;
+}
