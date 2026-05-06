@@ -46,3 +46,7 @@ next-env.d.ts
 
 # solana local validator
 test-ledger/
+
+# agents
+.agents
+.skills-lock.json
