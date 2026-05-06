@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { LexicalComposer, type InitialConfigType } from '@lexical/react/LexicalComposer';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
@@ -12,16 +12,21 @@ import { HeadingNode, QuoteNode } from '@lexical/rich-text';
 import { CodeNode } from '@lexical/code';
 import { ListNode, ListItemNode } from '@lexical/list';
 import { LinkNode } from '@lexical/link';
+import type { LexicalEditor } from 'lexical';
 import {
   $createParagraphNode,
   $createTextNode,
   $getRoot,
   type EditorState,
 } from 'lexical';
+import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import StaticToolbarPlugin from './StaticToolbarPlugin';
 import FloatingSemanticToolbar from './FloatingSemanticToolbar';
 import SemanticTooltipPlugin from './SemanticTooltipPlugin';
 import { SemanticNode } from './SemanticNode';
+import { usePrivy } from '@privy-io/react-auth';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { usePublish } from '@/hooks/usePublish';
 
 const STORAGE_KEY = 'interpretooor_draft';
 const AUTHOR_KEY = 'interpretooor_author_pubkey';
@@ -155,16 +160,98 @@ function AutoSizingTitle({ value, onChange }: { value: string; onChange: (value:
   );
 }
 
+function PublishControls({
+  disabled,
+  isPublishing,
+  onClick,
+  statusText,
+}: {
+  disabled: boolean;
+  isPublishing: boolean;
+  onClick: () => void;
+  statusText: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="rounded-full bg-[#F2DAFF] px-4 py-2 text-sm font-medium text-gray-900 transition-colors hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {isPublishing ? statusText : 'Continue'}
+    </button>
+  );
+}
+
+function EditorBridge({ onReady }: { onReady: (editor: LexicalEditor) => void }) {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    onReady(editor);
+  }, [editor, onReady]);
+
+  return null;
+}
+
 export default function InterpretooorEditor() {
+  const { authenticated, user } = usePrivy();
+  const { connected, publicKey } = useWallet();
   const [isReady, setIsReady] = useState(false);
   const [draft, setDraft] = useState<DraftDocument>(defaultDraft);
   const [title, setTitle] = useState(defaultDraft.metadata.title);
   const [sourceLanguage, setSourceLanguage] = useState(defaultDraft.metadata.sourceLanguage);
   const [authorPubkey, setAuthorPubkey] = useState(defaultDraft.metadata.authorPubkey);
   const [isPreview, setIsPreview] = useState(false);
+  const [editor, setEditor] = useState<LexicalEditor | null>(null);
   const latestContentRef = useRef<unknown>(null);
   const saveTimerRef = useRef<number | null>(null);
+  const activeAuthorPubkey = useMemo(() => {
+    return publicKey?.toBase58() ?? authorPubkey;
+  }, [authorPubkey, publicKey]);
 
+  const { handlePublish, isPublishing, statusText } = usePublish({
+    authorPubkey: activeAuthorPubkey,
+    editor,
+    sourceLanguage,
+    title,
+  });
+
+  const onPublishClick = async () => {
+    console.log('🟢 1. onPublishClick triggered!');
+
+    if (!connected || !publicKey) {
+      console.error('🔴 ERROR: Solana wallet is not connected.');
+      alert('Missing Solana wallet connection. Make sure you are connected.');
+      return;
+    }
+
+    console.log('🟢 2. Solana wallet found. Calling handlePublish...');
+    try {
+      const assetId = await handlePublish();
+      console.log('🟢 6. handlePublish returned assetId:', assetId);
+
+      if (assetId) {
+        console.log(`🟢 7. Final mint complete: ${assetId}`);
+        console.log(`🟢 Solscan Devnet: https://solscan.io/token/${assetId}?cluster=devnet`);
+      }
+    } catch (error) {
+      console.error('🔴 ERROR in onPublishClick:', error);
+    }
+  };
+
+  useEffect(() => {
+    const handlePublishEvent = () => {
+      void onPublishClick();
+    };
+
+    window.addEventListener('interpretooor:publish', handlePublishEvent);
+
+    return () => {
+      window.removeEventListener('interpretooor:publish', handlePublishEvent);
+    };
+  }, [handlePublish, isPublishing, onPublishClick]);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const initialDraft = createInitialDraft();
     setDraft(initialDraft);
@@ -173,14 +260,15 @@ export default function InterpretooorEditor() {
     setAuthorPubkey(initialDraft.metadata.authorPubkey);
     setIsReady(true);
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     if (!isReady) {
       return;
     }
 
-    window.localStorage.setItem(AUTHOR_KEY, authorPubkey);
-  }, [authorPubkey, isReady]);
+    window.localStorage.setItem(AUTHOR_KEY, activeAuthorPubkey);
+  }, [activeAuthorPubkey, isReady]);
 
   useEffect(() => {
     if (!isReady) {
@@ -192,7 +280,7 @@ export default function InterpretooorEditor() {
     const nextDraft: DraftDocument = {
       content,
       metadata: {
-        authorPubkey,
+        authorPubkey: activeAuthorPubkey,
         sourceLanguage,
         title,
       },
@@ -201,10 +289,9 @@ export default function InterpretooorEditor() {
     };
 
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextDraft));
-    setDraft(nextDraft);
-  }, [authorPubkey, isReady, sourceLanguage, title]);
+  }, [activeAuthorPubkey, draft.content, isReady, sourceLanguage, title]);
 
-  const persistDraft = (content: unknown) => {
+  const persistDraft = useCallback((content: unknown) => {
     if (typeof window === 'undefined') {
       return;
     }
@@ -212,7 +299,7 @@ export default function InterpretooorEditor() {
     const nextDraft: DraftDocument = {
       content,
       metadata: {
-        authorPubkey,
+        authorPubkey: activeAuthorPubkey,
         sourceLanguage,
         title,
       },
@@ -222,7 +309,7 @@ export default function InterpretooorEditor() {
 
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextDraft));
     setDraft(nextDraft);
-  };
+  }, [activeAuthorPubkey, sourceLanguage, title]);
 
   const schedulePersist = (content: unknown) => {
     latestContentRef.current = content;
@@ -243,7 +330,7 @@ export default function InterpretooorEditor() {
     }
 
     persistDraft(latestContentRef.current);
-  }, [authorPubkey, isReady, sourceLanguage, title]);
+  }, [isReady, persistDraft]);
 
   const initialConfig: InitialConfigType = useMemo(
     () => ({
@@ -285,7 +372,7 @@ export default function InterpretooorEditor() {
 
   return (
     <div className="min-h-screen bg-white text-ink">
-      <header className="sticky top-0 z-40 w-full border-b border-gray-100 bg-white">
+      <header className="sticky top-[70px] z-40 w-full border-b border-gray-100 bg-white">
         <div className="flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-4">
             <button
@@ -308,19 +395,14 @@ export default function InterpretooorEditor() {
             >
               Preview
             </button>
-            <button
-              type="button"
-              onClick={() => console.log('Publishing...')}
-              className="rounded-full bg-[#F2DAFF] px-4 py-2 text-sm font-medium text-gray-900 transition-colors hover:opacity-95"
-            >
-              Continue
-            </button>
+            <PublishControls disabled={isPublishing} isPublishing={isPublishing} onClick={onPublishClick} statusText={statusText} />
           </div>
         </div>
       </header>
 
       <main className="pb-16">
         <LexicalComposer initialConfig={initialConfig}>
+          <EditorBridge onReady={setEditor} />
           <StaticToolbarPlugin />
 
           <div className="mx-auto mt-8 w-full max-w-3xl px-4">

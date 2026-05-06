@@ -1,5 +1,6 @@
 import { cn } from '../lib/utils';
 import { motion } from 'motion/react';
+import ConnectWalletButton from './ConnectWalletButton';
 
 interface NavigationProps {
   currentPath: string;
@@ -42,12 +43,22 @@ export default function Navigation({ currentPath, onNavigate }: NavigationProps)
       </div>
 
       <div className="flex gap-4">
+        {currentPath === 'write' && (
+          <button
+            type="button"
+            onClick={() => {
+              console.log('Global publish button clicked!');
+              window.dispatchEvent(new CustomEvent('interpretooor:publish'));
+            }}
+            className="hidden sm:block text-sm font-sans tracking-tight text-ink px-6 py-2 rounded-full bg-pale-lavender hover:opacity-90 transition-colors"
+          >
+            Publish
+          </button>
+        )}
         <button className="hidden sm:block text-sm font-sans tracking-tight text-stone-300 px-6 py-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors">
           Whitepaper
         </button>
-        <button className="text-sm font-semibold tracking-tight text-ink px-6 py-2 rounded-full bg-parchment hover:bg-white transition-colors">
-          Connect Wallet
-        </button>
+        <ConnectWalletButton />
       </div>
     </nav>
   );
