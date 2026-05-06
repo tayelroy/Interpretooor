@@ -18,6 +18,7 @@ import {
   $getRoot,
   type EditorState,
 } from 'lexical';
+import StaticToolbarPlugin from './StaticToolbarPlugin';
 import FloatingSemanticToolbar from './FloatingSemanticToolbar';
 import SemanticTooltipPlugin from './SemanticTooltipPlugin';
 import { SemanticNode } from './SemanticNode';
@@ -120,8 +121,8 @@ function EditorPlaceholder() {
 
 function StatusIndicator() {
   return (
-    <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.24em] text-ink/70">
-      <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.14)]" />
+    <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 shadow-sm">
+      <span className="h-2 w-2 rounded-full bg-emerald-500" />
       <span>Saved</span>
     </div>
   );
@@ -283,16 +284,26 @@ export default function InterpretooorEditor() {
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(255,238,196,0.9),_transparent_34%),linear-gradient(180deg,#fffdf5_0%,#fffaf0_100%)] text-ink">
-      <header className="sticky top-0 z-40 border-b border-ink/10 bg-[rgba(255,251,241,0.82)] backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1100px] items-center justify-between gap-4 px-4 py-4 md:px-8">
-          <StatusIndicator />
+    <div className="min-h-screen bg-white text-ink">
+      <header className="sticky top-0 z-40 w-full border-b border-gray-100 bg-white">
+        <div className="flex items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => window.history.back()}
+              className="text-xl leading-none text-gray-700 transition-colors hover:text-gray-900"
+              aria-label="Go back"
+            >
+              &lt;
+            </button>
+            <StatusIndicator />
+          </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setIsPreview((current) => !current)}
-              className="rounded-full border border-ink/10 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-ink transition-colors hover:bg-ink/5"
+              className="rounded-full bg-gray-100 px-4 py-2 text-sm font-medium text-gray-900 transition-colors hover:bg-gray-200"
               aria-pressed={isPreview}
             >
               Preview
@@ -300,88 +311,46 @@ export default function InterpretooorEditor() {
             <button
               type="button"
               onClick={() => console.log('Publishing...')}
-              className="rounded-full bg-ink px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-white transition-colors hover:bg-ink/90"
+              className="rounded-full bg-[#F2DAFF] px-4 py-2 text-sm font-medium text-gray-900 transition-colors hover:opacity-95"
             >
-              Publish
+              Continue
             </button>
           </div>
         </div>
       </header>
 
-      <main className="flex-1">
-        <div className="mx-auto w-full max-w-[700px] px-4 py-12 md:px-6 lg:px-0">
-          <div className="space-y-6">
+      <main className="pb-16">
+        <LexicalComposer initialConfig={initialConfig}>
+          <StaticToolbarPlugin />
+
+          <div className="mx-auto mt-8 w-full max-w-3xl px-4">
             <div className="space-y-4">
               <p className="text-[10px] uppercase tracking-[0.34em] text-muted-ash">Writing View</p>
               <AutoSizingTitle value={title} onChange={setTitle} />
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.22em] text-muted-ash">
-              <span className="rounded-full border border-ink/10 bg-white px-3 py-1">.mdh draft</span>
-              <span className="rounded-full border border-ink/10 bg-white px-3 py-1">Semantic spans</span>
-              <span className="rounded-full border border-ink/10 bg-white px-3 py-1">Hover inspect</span>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="space-y-2 text-xs uppercase tracking-[0.24em] text-muted-ash">
-                <span>Source language</span>
-                <select
-                  value={sourceLanguage}
-                  onChange={(event) => setSourceLanguage(event.target.value)}
-                  className="w-full rounded-2xl border border-ink/10 bg-white px-4 py-3 text-sm uppercase tracking-[0.16em] text-ink outline-none"
-                >
-                  <option>English</option>
-                  <option>Spanish</option>
-                  <option>French</option>
-                  <option>Japanese</option>
-                  <option>German</option>
-                </select>
-              </label>
-
-              <label className="space-y-2 text-xs uppercase tracking-[0.24em] text-muted-ash">
-                <span>Author pubkey</span>
-                <input
-                  value={authorPubkey}
-                  onChange={(event) => setAuthorPubkey(event.target.value)}
-                  className="w-full rounded-2xl border border-ink/10 bg-white px-4 py-3 text-sm tracking-wide text-ink outline-none"
-                  placeholder="anonymous-author"
-                />
-              </label>
+            <div className="relative mt-8">
+              <RichTextPlugin
+                contentEditable={
+                  <ContentEditable className="min-h-[60vh] w-full border-none bg-transparent text-lg leading-relaxed outline-none caret-black focus:outline-none md:text-xl" />
+                }
+                placeholder={<EditorPlaceholder />}
+                ErrorBoundary={({ children }) => children}
+              />
+              <HistoryPlugin />
+              <MarkdownShortcutPlugin />
+              <OnChangePlugin
+                onChange={(editorState: EditorState) => {
+                  const content = editorState.toJSON();
+                  schedulePersist(content);
+                }}
+              />
             </div>
           </div>
 
-          <LexicalComposer initialConfig={initialConfig}>
-            <section className="mt-10 rounded-[32px] border border-ink/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(255,255,255,0.84))] p-5 shadow-[0_30px_100px_rgba(26,26,26,0.08)] md:p-8">
-              <div className="relative">
-                <RichTextPlugin
-                  contentEditable={
-                    <ContentEditable className="w-full border-none bg-transparent text-[18px] leading-[1.85] text-ink outline-none placeholder:text-ink/25 focus:outline-none md:text-[20px] lg:text-[21px]" />
-                  }
-                  placeholder={<EditorPlaceholder />}
-                  ErrorBoundary={({ children }) => children}
-                />
-                <HistoryPlugin />
-                <MarkdownShortcutPlugin />
-                <OnChangePlugin
-                  onChange={(editorState: EditorState) => {
-                    const content = editorState.toJSON();
-                    schedulePersist(content);
-                  }}
-                />
-              </div>
-            </section>
-
-            <SemanticTooltipPlugin enabled={isPreview} />
-            <FloatingSemanticToolbar disabled={isPreview} />
-          </LexicalComposer>
-
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-ink/10 bg-white px-4 py-3 text-xs text-muted-ash">
-            <span>
-              Saved locally as <strong className="text-ink">interpretooor_draft</strong>
-            </span>
-            <span>{draft.updatedAt ? `Last saved ${new Date(draft.updatedAt).toLocaleString()}` : 'Waiting for first save'}</span>
-          </div>
-        </div>
+          <SemanticTooltipPlugin enabled={isPreview} />
+          <FloatingSemanticToolbar disabled={isPreview} />
+        </LexicalComposer>
       </main>
     </div>
   );

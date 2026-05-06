@@ -2,25 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import {
-  $getSelection,
-  $isRangeSelection,
-  $setSelection,
-  FORMAT_TEXT_COMMAND,
-  type RangeSelection,
-} from 'lexical';
+import { $getSelection, $isRangeSelection, $setSelection, type RangeSelection } from 'lexical';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { $createHeadingNode, $createQuoteNode, type HeadingTagType } from '@lexical/rich-text';
-import { $setBlocksType } from '@lexical/selection';
-import {
-  Bold,
-  Heading1,
-  Heading2,
-  Italic,
-  Quote,
-  Strikethrough,
-  Underline,
-} from 'lucide-react';
 import { $createSemanticNode } from './SemanticNode';
 
 type FloatingToolbarPosition = {
@@ -165,34 +148,6 @@ export default function FloatingSemanticToolbar({ disabled = false }: FloatingSe
     }
   }, [mode]);
 
-  const applyFormat = (format: 'bold' | 'italic' | 'underline' | 'strikethrough') => {
-    editor.dispatchCommand(FORMAT_TEXT_COMMAND, format);
-  };
-
-  const applyHeading = (tag: HeadingTagType) => {
-    editor.update(() => {
-      const selection = $getSelection();
-
-      if (!$isRangeSelection(selection)) {
-        return;
-      }
-
-      $setBlocksType(selection, () => $createHeadingNode(tag));
-    });
-  };
-
-  const applyQuote = () => {
-    editor.update(() => {
-      const selection = $getSelection();
-
-      if (!$isRangeSelection(selection)) {
-        return;
-      }
-
-      $setBlocksType(selection, () => $createQuoteNode());
-    });
-  };
-
   const beginSemanticAction = (action: SemanticAction) => {
     captureSelection();
 
@@ -300,86 +255,7 @@ export default function FloatingSemanticToolbar({ disabled = false }: FloatingSe
     }
 
     return (
-      <>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => applyFormat('bold')}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-white/5 text-white transition-colors hover:bg-white/10"
-            aria-label="Bold"
-            title="Bold"
-          >
-            <Bold className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => applyFormat('italic')}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-white/5 text-white transition-colors hover:bg-white/10"
-            aria-label="Italic"
-            title="Italic"
-          >
-            <Italic className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => applyFormat('underline')}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-white/5 text-white transition-colors hover:bg-white/10"
-            aria-label="Underline"
-            title="Underline"
-          >
-            <Underline className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => applyFormat('strikethrough')}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-white/5 text-white transition-colors hover:bg-white/10"
-            aria-label="Strikethrough"
-            title="Strikethrough"
-          >
-            <Strikethrough className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="h-5 w-px bg-white/10" aria-hidden="true" />
-
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => applyHeading('h1')}
-            className="inline-flex h-8 items-center gap-2 rounded-md bg-white/5 px-3 text-xs font-medium text-white transition-colors hover:bg-white/10"
-          >
-            <Heading1 className="h-4 w-4" />
-            <span>H1</span>
-          </button>
-          <button
-            type="button"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => applyHeading('h2')}
-            className="inline-flex h-8 items-center gap-2 rounded-md bg-white/5 px-3 text-xs font-medium text-white transition-colors hover:bg-white/10"
-          >
-            <Heading2 className="h-4 w-4" />
-            <span>H2</span>
-          </button>
-          <button
-            type="button"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={applyQuote}
-            className="inline-flex h-8 items-center gap-2 rounded-md bg-white/5 px-3 text-xs font-medium text-white transition-colors hover:bg-white/10"
-          >
-            <Quote className="h-4 w-4" />
-            <span>Quote</span>
-          </button>
-        </div>
-
-        <div className="h-5 w-px bg-white/10" aria-hidden="true" />
-
-        <div className="flex items-center gap-1">{semanticActions.map(semanticButton)}</div>
-      </>
+      <div className="flex items-center gap-1">{semanticActions.map(semanticButton)}</div>
     );
   }, [activeAction, note, mode]);
 
