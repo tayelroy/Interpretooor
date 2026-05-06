@@ -1,68 +1,137 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import {
-  $getSelection,
-  $isRangeSelection,
-  COMMAND_PRIORITY_LOW,
-  SELECTION_CHANGE_COMMAND,
-} from 'lexical';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { $getSelection, $isRangeSelection, FORMAT_TEXT_COMMAND, type EditorState } from 'lexical';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { ChevronDown, Eye, Highlighter, PanelTop, Sparkles } from 'lucide-react';
+import {
+  Bold,
+  Code2,
+  Highlighter,
+  Italic,
+  MessageSquareText,
+  Pilcrow,
+  Quote,
+  Strikethrough,
+  Underline,
+} from 'lucide-react';
 import { $createSemanticNode } from './SemanticNode';
 
-type SemanticOption = {
-  description: string;
-  label: string;
-  value: string;
+type FloatingToolbarPosition = {
+  left: number;
+  top: number;
 };
 
-const semanticOptions: SemanticOption[] = [
-  { label: 'Context', value: 'context', description: 'Background or framing detail' },
-  { label: 'Entity', value: 'entity', description: 'People, names, brands, or places' },
-  { label: 'Claim', value: 'claim', description: 'A factual or argumentative claim' },
-  { label: 'Tone', value: 'tone', description: 'Sentiment, style, or rhetorical intent' },
-];
+type SemanticAction = {
+  semanticTag: string;
+  notePrompt: string;
+};
 
 interface FloatingSemanticToolbarProps {
-  isPreview: boolean;
-  onPreviewChange: (preview: boolean) => void;
+  isPreview?: boolean;
+  onPreviewChange?: (preview: boolean) => void;
 }
 
-export default function FloatingSemanticToolbar({ isPreview, onPreviewChange }: FloatingSemanticToolbarProps) {
-  const [editor] = useLexicalComposerContext();
-  const [activeTag, setActiveTag] = useState('context');
-  const [note, setNote] = useState('');
-  const [selectionText, setSelectionText] = useState('');
+const TOOLBAR_DELAY_MS = 200;
+const TOOLBAR_OFFSET_PX = 56;
 
-  const activeOption = useMemo(
-    () => semanticOptions.find((option) => option.value === activeTag) ?? semanticOptions[0],
-    [activeTag],
-  );
+export default function FloatingSemanticToolbar(_props: FloatingSemanticToolbarProps) {
+  const [editor] = useLexicalComposerContext();
+  const timeoutRef = useRef<number | null>(null);
+  const [position, setPosition] = useState<FloatingToolbarPosition | null>(null);
+
+  const clearToolbar = () => {
+    if (timeoutRef.current !== null) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+
+    setPosition(null);
+  };
+
+  const scheduleToolbar = (_editorState: EditorState) => {
+    if (timeoutRef.current !== null) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+
+    timeoutRef.current = window.setTimeout(() => {
+      editor.getEditorState().read(() => {
+        const selection = $getSelection();
+
+        if (!$isRangeSelection(selection) || selection.isCollapsed()) {
+          clearToolbar();
+          return;
+        }
+
+        if (selection.getTextContent() === '') {
+          clearToolbar();
+          return;
+        }
+
+        const nativeSelection = window.getSelection();
+
+        if (!nativeSelection || nativeSelection.rangeCount === 0) {
+          clearToolbar();
+          return;
+        }
+
+        const range = nativeSelection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+
+        if (rect.width === 0 && rect.height === 0) {
+          clearToolbar();
+          return;
+        }
+
+        setPosition({
+          left: Math.min(Math.max(rect.left + rect.width / 2, 16), window.innerWidth - 16),
+          top: Math.max(rect.top - TOOLBAR_OFFSET_PX, 8),
+        });
+      });
+
+      timeoutRef.current = null;
+    }, TOOLBAR_DELAY_MS);
+  };
 
   useEffect(() => {
-    return editor.registerCommand(
-      SELECTION_CHANGE_COMMAND,
-      () => {
-        editor.getEditorState().read(() => {
-          const selection = $getSelection();
+    const unregisterUpdateListener = editor.registerUpdateListener(({ editorState }) => {
+      let selectionText = '';
 
-          if (!$isRangeSelection(selection) || selection.isCollapsed()) {
-            setSelectionText('');
-            return;
-          }
+      editorState.read(() => {
+        const selection = $getSelection();
 
-          setSelectionText(selection.getTextContent());
-        });
+        if ($isRangeSelection(selection) && !selection.isCollapsed()) {
+          selectionText = selection.getTextContent();
+        }
+      });
 
-        return false;
-      },
-      COMMAND_PRIORITY_LOW,
-    );
+      if (selectionText === '') {
+        clearToolbar();
+        return;
+      }
+
+      scheduleToolbar(editorState);
+    });
+
+    return () => {
+      unregisterUpdateListener();
+
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
   }, [editor]);
 
-  const annotateSelection = () => {
-    if (isPreview) {
+  const applyFormat = (format: 'bold' | 'italic' | 'underline' | 'strikethrough') => {
+    editor.dispatchCommand(FORMAT_TEXT_COMMAND, format);
+  };
+
+  const applySemanticAction = (action: SemanticAction) => {
+    const note = window.prompt(action.notePrompt, '');
+
+    if (note === null) {
       return;
     }
 
@@ -73,87 +142,131 @@ export default function FloatingSemanticToolbar({ isPreview, onPreviewChange }: 
         return;
       }
 
-      const text = selection.getTextContent().trim();
+      const selectedText = selection.getTextContent();
 
-      if (!text) {
+      if (selectedText === '') {
         return;
       }
 
-      const semanticNode = $createSemanticNode(text, activeTag, note.trim());
+      const semanticNode = $createSemanticNode(selectedText, action.semanticTag, note.trim());
       selection.insertNodes([semanticNode]);
-      setNote('');
     });
   };
 
-  return (
-    <aside className="fixed bottom-4 left-4 right-4 z-40 md:bottom-auto md:left-auto md:right-8 md:top-28 md:w-[340px]">
-      <div className="rounded-[28px] border border-ink/10 bg-ink/95 p-4 text-parchment shadow-[0_24px_80px_rgba(0,0,0,0.32)] backdrop-blur-2xl">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.28em] text-pale-lavender/80">
-              <Sparkles size={12} />
-              Semantic Toolbar
-            </div>
-            <p className="mt-2 text-sm text-parchment/70">
-              Mark selected text with a semantic label and a short note.
-            </p>
-          </div>
+  if (!position || typeof document === 'undefined') {
+    return null;
+  }
 
-          <button
-            type="button"
-            onClick={() => onPreviewChange(!isPreview)}
-            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[11px] uppercase tracking-[0.22em] text-parchment/80 transition-colors hover:bg-white/10"
-          >
-            <Eye size={12} />
-            {isPreview ? 'Exit preview' : 'Preview'}
-          </button>
-        </div>
-
-        <div className="mt-4 space-y-3">
-          <label className="block text-[10px] uppercase tracking-[0.24em] text-parchment/55">Semantic label</label>
-          <div className="relative">
-            <select
-              value={activeTag}
-              onChange={(event) => setActiveTag(event.target.value)}
-              className="w-full appearance-none rounded-2xl border border-white/10 bg-white/6 px-4 py-3 pr-10 text-sm text-parchment outline-none transition-colors focus:border-pale-lavender/50"
-            >
-              {semanticOptions.map((option) => (
-                <option key={option.value} value={option.value} className="text-ink">
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-parchment/50" size={16} />
-          </div>
-
-          <label className="block text-[10px] uppercase tracking-[0.24em] text-parchment/55">Semantic note</label>
-          <input
-            type="text"
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            placeholder={activeOption.description}
-            className="w-full rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-sm text-parchment placeholder:text-parchment/35 outline-none transition-colors focus:border-pale-lavender/50"
-          />
-
-          <button
-            type="button"
-            onClick={annotateSelection}
-            disabled={isPreview || !selectionText.trim()}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-pale-lavender px-4 py-3 text-sm font-semibold text-ink transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Highlighter size={16} />
-            Mark selection
-          </button>
-
-          <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-parchment/70">
-            <span className="inline-flex items-center gap-2">
-              <PanelTop size={14} />
-              {selectionText ? `${selectionText.length} selected chars` : 'Select text to annotate'}
-            </span>
-            <span className="text-pale-lavender/80">{activeOption.label}</span>
-          </div>
-        </div>
+  return createPortal(
+    <div
+      className="fixed z-50 flex -translate-x-1/2 items-center rounded-md bg-gray-900 p-1 text-white shadow-lg ring-1 ring-black/20"
+      style={{ left: position.left, top: position.top }}
+      role="toolbar"
+      aria-label="Floating formatting and semantic toolbar"
+    >
+      <div className="flex items-center space-x-1">
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => applyFormat('bold')}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-sm text-sm text-white transition-colors hover:bg-white/10"
+          aria-label="Bold"
+          title="Bold"
+        >
+          <Bold className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => applyFormat('italic')}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-sm text-sm text-white transition-colors hover:bg-white/10"
+          aria-label="Italic"
+          title="Italic"
+        >
+          <Italic className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => applyFormat('underline')}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-sm text-sm text-white transition-colors hover:bg-white/10"
+          aria-label="Underline"
+          title="Underline"
+        >
+          <Underline className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => applyFormat('strikethrough')}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-sm text-sm text-white transition-colors hover:bg-white/10"
+          aria-label="Strikethrough"
+          title="Strikethrough"
+        >
+          <Strikethrough className="h-4 w-4" />
+        </button>
       </div>
-    </aside>
+
+      <div className="mx-1 h-6 w-px bg-white/10" aria-hidden="true" />
+
+      <div className="flex items-center space-x-1">
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => applySemanticAction({ semanticTag: 'idiom', notePrompt: 'Add a note for this idiom:' })}
+          className="inline-flex h-9 items-center gap-2 rounded-sm px-3 text-xs font-medium text-white transition-colors hover:bg-white/10"
+          aria-label="Mark as Idiom"
+          title="Mark as Idiom"
+        >
+          <Quote className="h-4 w-4" />
+          <span className="hidden sm:inline">Mark as Idiom</span>
+        </button>
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => applySemanticAction({ semanticTag: 'tone', notePrompt: 'What tone should be recorded for this selection?' })}
+          className="inline-flex h-9 items-center gap-2 rounded-sm px-3 text-xs font-medium text-white transition-colors hover:bg-white/10"
+          aria-label="Set Tone"
+          title="Set Tone"
+        >
+          <Highlighter className="h-4 w-4" />
+          <span className="hidden sm:inline">Set Tone</span>
+        </button>
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => applySemanticAction({ semanticTag: 'intent', notePrompt: 'What intent should be recorded for this selection?' })}
+          className="inline-flex h-9 items-center gap-2 rounded-sm px-3 text-xs font-medium text-white transition-colors hover:bg-white/10"
+          aria-label="Identify Intent"
+          title="Identify Intent"
+        >
+          <MessageSquareText className="h-4 w-4" />
+          <span className="hidden sm:inline">Identify Intent</span>
+        </button>
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => applySemanticAction({ semanticTag: 'context', notePrompt: 'Add a context note for this selection:' })}
+          className="inline-flex h-9 items-center gap-2 rounded-sm px-3 text-xs font-medium text-white transition-colors hover:bg-white/10"
+          aria-label="Context"
+          title="Context"
+        >
+          <Pilcrow className="h-4 w-4" />
+          <span className="hidden sm:inline">Context</span>
+        </button>
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => applySemanticAction({ semanticTag: 'code', notePrompt: 'Add a code note for this selection:' })}
+          className="inline-flex h-9 items-center gap-2 rounded-sm px-3 text-xs font-medium text-white transition-colors hover:bg-white/10"
+          aria-label="Code"
+          title="Code"
+        >
+          <Code2 className="h-4 w-4" />
+          <span className="hidden sm:inline">Code</span>
+        </button>
+      </div>
+    </div>,
+    document.body,
   );
 }
