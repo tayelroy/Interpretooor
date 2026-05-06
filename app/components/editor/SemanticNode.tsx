@@ -61,12 +61,8 @@ export class SemanticNode extends TextNode {
     const dom = super.createDOM(config);
     dom.dataset.semanticTag = this.__semanticTag;
     dom.dataset.semanticNote = this.__semanticNote;
-    dom.classList.add('semantic-token');
+    dom.className = 'group relative inline cursor-pointer rounded-sm border-b-2 border-orange-400 bg-orange-100 px-1 text-orange-900 shadow-sm transition-colors hover:bg-orange-200/90';
     dom.title = this.__semanticNote ? `${this.__semanticTag}: ${this.__semanticNote}` : this.__semanticTag;
-    dom.style.background = 'rgba(240, 215, 255, 0.72)';
-    dom.style.borderBottom = '1px solid rgba(26, 26, 26, 0.15)';
-    dom.style.borderRadius = '0.2rem';
-    dom.style.padding = '0 0.15em';
     return dom;
   }
 
@@ -82,6 +78,8 @@ export class SemanticNode extends TextNode {
       dom.dataset.semanticNote = this.__semanticNote;
       dom.title = this.__semanticNote ? `${this.__semanticTag}: ${this.__semanticNote}` : this.__semanticTag;
     }
+
+    dom.className = 'group relative inline cursor-pointer rounded-sm border-b-2 border-orange-400 bg-orange-100 px-1 text-orange-900 shadow-sm transition-colors hover:bg-orange-200/90';
 
     return isUpdated;
   }
