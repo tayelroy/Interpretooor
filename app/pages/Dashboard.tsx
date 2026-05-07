@@ -1,25 +1,82 @@
-import { motion } from 'motion/react';
-import { ArrowRight, BadgeCheck, Languages } from 'lucide-react';
+"use client";
 
-interface Job {
-  id: string;
-  source: string;
-  target: string;
-  reward: number;
-  preview: string;
-  timestamp: string;
+import { useEffect, useState, useCallback } from 'react';
+import { motion } from 'motion/react';
+import { ArrowRight, BadgeCheck, Languages, Clock, AlertCircle, Loader2, Globe } from 'lucide-react';
+import { PublicKey } from '@solana/web3.js';
+import { useBounty, type BountyAccount } from '../../hooks/useBounty';
+
+// ─── Status badge helpers ─────────────────────────────────────────────────────
+
+function statusLabel(status: BountyAccount['status']): string {
+  if ('open' in status) return 'Open';
+  if ('claimed' in status) return 'Claimed';
+  if ('pendingReview' in status) return 'Pending Review';
+  if ('disputed' in status) return 'Disputed';
+  if ('paid' in status) return 'Paid';
+  return 'Unknown';
 }
 
-export default function Dashboard({ onJobSelect }: { onJobSelect: (id: string) => void }) {
-  const pendingJobs: Job[] = [
-    { id: 'TR-8924', source: 'Japanese', target: 'English', reward: 0.8, preview: '明日の会議での「空気を読む」姿勢が問われています。直接的すぎる表現は避け...', timestamp: '2 mins ago' },
-    { id: 'TR-8925', source: 'French', target: 'English', reward: 1.2, preview: 'Protocol requirements dictate that all validator nodes must maintain an uptime...', timestamp: '12 mins ago' },
-    { id: 'TR-8926', source: 'Spanish', target: 'English', reward: 0.5, preview: 'The new decentralized exchange features automated market making algorithms...', timestamp: '1 hour ago' },
-    { id: 'TR-8927', source: 'Korean', target: 'English', reward: 1.5, preview: 'Analysis of recent on-chain data suggests a significant shift in liquidity...', timestamp: '3 hours ago' },
-  ];
+function statusColor(status: BountyAccount['status']): string {
+  if ('open' in status) return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+  if ('claimed' in status) return 'bg-blue-100 text-blue-800 border-blue-200';
+  if ('pendingReview' in status) return 'bg-amber-100 text-amber-800 border-amber-200';
+  if ('disputed' in status) return 'bg-red-100 text-red-800 border-red-200';
+  if ('paid' in status) return 'bg-stone-100 text-stone-500 border-stone-200';
+  return '';
+}
+
+function usdcAmount(rawAmount: { toNumber: () => number }): string {
+  return (rawAmount.toNumber() / 1_000_000).toFixed(2);
+}
+
+function timeAgo(submissionTs: number): string {
+  if (submissionTs === 0) return 'N/A';
+  const diffSecs = Math.floor(Date.now() / 1000) - submissionTs;
+  if (diffSecs < 60) return `${diffSecs}s ago`;
+  if (diffSecs < 3600) return `${Math.floor(diffSecs / 60)}m ago`;
+  if (diffSecs < 86400) return `${Math.floor(diffSecs / 3600)}h ago`;
+  return `${Math.floor(diffSecs / 86400)}d ago`;
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+interface DashboardProps {
+  onJobSelect: (bountyPda: PublicKey) => void;
+  containerClassName?: string;
+}
+
+export default function Dashboard({ onJobSelect, containerClassName }: DashboardProps) {
+  const { fetchAllBounties, isDisputeWindowOpen } = useBounty();
+
+  const [bounties, setBounties] = useState<BountyAccount[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadBounties = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Show only open + claimed jobs on the public job board
+      const all = await fetchAllBounties();
+      const active = all.filter(
+        (b) => 'open' in b.status || 'claimed' in b.status
+      );
+      setBounties(active);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchAllBounties]);
+
+  useEffect(() => {
+    loadBounties();
+  }, [loadBounties]);
 
   return (
-    <div className="bg-parchment min-h-screen pt-40 pb-20 px-8">
+    <div className={containerClassName ?? 'bg-parchment min-h-screen pt-40 pb-20 px-8'}>
       <div className="max-w-7xl mx-auto">
         <header className="mb-12 flex justify-between items-end">
           <div>
@@ -29,40 +86,128 @@ export default function Dashboard({ onJobSelect }: { onJobSelect: (id: string) =
           <div className="flex gap-4">
             <div className="px-6 py-2 bg-white rounded-full border border-stone-200 text-stone-500 text-sm flex items-center gap-2">
               <BadgeCheck size={16} />
-              Validator Verified
+              On-Chain Escrow
             </div>
+            <button
+              onClick={loadBounties}
+              className="px-6 py-2 bg-white rounded-full border border-stone-200 text-stone-500 text-sm hover:border-stone-300 transition-colors"
+            >
+              Refresh
+            </button>
           </div>
         </header>
 
+        {loading && (
+          <div className="flex flex-col items-center justify-center py-32 gap-4 text-stone-400">
+            <Loader2 size={32} className="animate-spin" />
+            <p className="text-sm">Fetching on-chain bounties…</p>
+          </div>
+        )}
+
+        {error && (
+          <div className="flex items-center gap-3 p-6 bg-red-50 border border-red-200 rounded-2xl text-red-700 mb-8">
+            <AlertCircle size={20} />
+            <span className="text-sm">{error}</span>
+          </div>
+        )}
+
+        {!loading && !error && bounties.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-32 gap-4 text-stone-400">
+            <Languages size={48} className="opacity-30" />
+            <p className="text-sm">No open bounties right now. Check back soon.</p>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {pendingJobs.map((job, i) => (
+          {bounties.map((bounty, i) => (
             <motion.div
-              key={job.id}
+              key={bounty.publicKey.toBase58()}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.1 }}
+              transition={{ delay: i * 0.07 }}
               className="bg-white rounded-[32px] p-8 border border-stone-200/60 shadow-sm hover:shadow-md transition-all group flex flex-col h-full"
             >
+              {/* Header row */}
               <div className="flex justify-between items-start mb-6">
-                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-stone-100 text-stone-900 border border-stone-200">
-                  <Languages size={14} />
-                  <span className="text-xs font-semibold uppercase tracking-wider">{job.source}</span>
-                  <ArrowRight size={12} className="text-stone-400" />
-                  <span className="text-xs font-semibold uppercase tracking-wider">{job.target}</span>
-                </div>
+                <span
+                  className={`text-xs font-semibold px-3 py-1 rounded-full border ${statusColor(bounty.status)}`}
+                >
+                  {statusLabel(bounty.status)}
+                </span>
                 <div className="flex items-center gap-1 text-ink font-bold text-lg">
-                  <span>{job.reward.toFixed(2)}</span>
+                  <span>{usdcAmount(bounty.rewardAmount)}</span>
                   <span className="text-stone-400 text-sm font-normal">USDC</span>
                 </div>
               </div>
 
-              <p className="text-stone-600 mb-8 flex-grow leading-relaxed italic">&ldquo;{job.preview}&rdquo;</p>
+              {/* Arweave TX ID preview + language */}
+              <div className="flex flex-col gap-2 mb-6 flex-grow">
+                {bounty.targetLanguage && (
+                  <div className="flex items-center gap-2 text-xs text-stone-500 font-medium">
+                    <Globe size={12} />
+                    <span>→ {bounty.targetLanguage}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 text-xs text-stone-400 font-mono">
+                  <ArrowRight size={12} />
+                  <span className="truncate">{bounty.originalTxId}</span>
+                </div>
 
+                {'pendingReview' in bounty.status && (
+                  <div className="flex items-center gap-2 text-xs mt-2">
+                    <Clock
+                      size={12}
+                      className={
+                        isDisputeWindowOpen(bounty)
+                          ? 'text-amber-500'
+                          : 'text-emerald-500'
+                      }
+                    />
+                    <span
+                      className={
+                        isDisputeWindowOpen(bounty)
+                          ? 'text-amber-600'
+                          : 'text-emerald-600'
+                      }
+                    >
+                      {isDisputeWindowOpen(bounty)
+                        ? 'Review window open'
+                        : 'Window expired — payout ready'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer row */}
               <div className="flex justify-between items-center mt-auto">
-                <span className="text-xs text-stone-400 font-medium uppercase tracking-widest">{job.timestamp}</span>
-                <button onClick={() => onJobSelect(job.id)} className="px-8 py-3 bg-pale-lavender text-ink rounded-xl font-semibold hover:bg-opacity-80 transition-all active:scale-95">
-                  Review
-                </button>
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-stone-400 font-mono truncate w-28">
+                    {bounty.author.toBase58().slice(0, 8)}…
+                  </span>
+                  {'open' in bounty.status && (
+                    <span className="text-xs text-stone-400">
+                      {timeAgo(bounty.submissionTimestamp.toNumber())}
+                    </span>
+                  )}
+                </div>
+
+                {'open' in bounty.status && (
+                  <button
+                    onClick={() => onJobSelect(bounty.publicKey)}
+                    className="px-8 py-3 bg-pale-lavender text-ink rounded-xl font-semibold hover:bg-opacity-80 transition-all active:scale-95"
+                  >
+                    Claim
+                  </button>
+                )}
+
+                {'claimed' in bounty.status && (
+                  <button
+                    onClick={() => onJobSelect(bounty.publicKey)}
+                    className="px-8 py-3 bg-stone-100 text-stone-600 rounded-xl font-semibold hover:bg-stone-200 transition-all active:scale-95"
+                  >
+                    View
+                  </button>
+                )}
               </div>
             </motion.div>
           ))}
