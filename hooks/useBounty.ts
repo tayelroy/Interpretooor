@@ -140,11 +140,11 @@ export function useBounty() {
   // ── Sponsor upload via the backend relayer ──────────────────────────────────
 
   /**
-   * Uploads a document to Arweave via the platform relayer (no user-side
-   * Irys funding needed). Returns the 43-char Arweave TX ID.
+   * Uploads a raw .mdh string to Arweave via the platform relayer.
+   * Returns the Irys transaction ID.
    */
   const sponsorUpload = useCallback(
-    async (data: unknown, tags?: Array<{ name: string; value: string }>): Promise<string> => {
+    async (mdhContent: string): Promise<string> => {
       const activeWallet = solanaWallets[0];
       if (!activeWallet) throw new Error('No wallet connected');
 
@@ -152,12 +152,11 @@ export function useBounty() {
         `${process.env.NEXT_PUBLIC_RELAYER_URL}/sponsor-upload`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            data: JSON.stringify(data),
-            tags,
-            uploaderAddress: activeWallet.address,
-          }),
+          headers: {
+            'Content-Type': 'text/plain',
+            'X-Uploader-Address': activeWallet.address,
+          },
+          body: mdhContent,
         }
       );
 
@@ -335,11 +334,7 @@ export function useBounty() {
       const provider = buildProvider();
       const program = buildProgram(provider);
 
-      // Upload translated article to Arweave
-      const translatedTxId = await sponsorUpload(translationData, [
-        { name: 'Content-Type', value: 'application/json' },
-        { name: 'Article-Type', value: 'translation' },
-      ]);
+      const translatedTxId = await sponsorUpload(translationData as string);
 
       const sig = await program.methods
         .submitTranslation(translatedTxId)
