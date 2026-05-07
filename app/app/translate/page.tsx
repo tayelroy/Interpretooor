@@ -83,7 +83,7 @@ export default function TranslatePage() {
       )}
 
       <Dashboard
-        onJobSelect={(pda) => router.push(`/bounty/${pda.toBase58()}`)}
+        onJobSelect={(pda) => router.push(`/app/bounty/${pda.toBase58()}`)}
         containerClassName={
           hasArticles
             ? 'bg-parchment min-h-screen pt-10 pb-20 px-8'

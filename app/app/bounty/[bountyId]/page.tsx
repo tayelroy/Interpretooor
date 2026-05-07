@@ -4,13 +4,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useWallets } from '@privy-io/react-auth/solana';
 import { PublicKey } from '@solana/web3.js';
-import { ArrowLeft, Download, CheckCircle, Loader2, AlertCircle, Globe } from 'lucide-react';
+import { ArrowLeft, Download, CheckCircle, Loader2, AlertCircle, Globe, XCircle } from 'lucide-react';
 import { useBounty, type BountyAccount } from '@/hooks/useBounty';
 import { parseMdh, exportToMdh, type ParsedMdh } from '@/lib/mdh-utils';
 import MdhRenderer from '@/app/components/MdhRenderer';
 import { toast } from 'sonner';
 
-const ARWEAVE_GATEWAY = process.env.NEXT_PUBLIC_ARWEAVE_GATEWAY ?? 'https://arweave.net';
+const IRYS_GATEWAY = process.env.NEXT_PUBLIC_IRYS_NODE_URL ?? 'https://devnet.irys.xyz';
 
 function usdcAmount(raw: { toNumber: () => number }): string {
   return (raw.toNumber() / 1_000_000).toFixed(2);
@@ -41,7 +41,7 @@ export default function BountyDetailPage() {
   const { wallets } = useWallets();
   const activeAddress = wallets[0]?.address;
 
-  const { fetchBounty, claimBounty, disputeBounty } = useBounty();
+  const { fetchBounty, claimBounty, cancelBounty, disputeBounty } = useBounty();
 
   const [bounty, setBounty] = useState<BountyAccount | null>(null);
   const [originalParsed, setOriginalParsed] = useState<ParsedMdh | null>(null);
@@ -49,6 +49,7 @@ export default function BountyDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -58,8 +59,10 @@ export default function BountyDetailPage() {
       const data = await fetchBounty(pda);
       setBounty(data);
 
-      const res = await fetch(`${ARWEAVE_GATEWAY}/${data.originalTxId}`);
-      if (!res.ok) throw new Error(`Failed to fetch content (${res.status})`);
+      const contentUrl = `${IRYS_GATEWAY}/${data.originalTxId}`;
+      console.log('[bounty] fetching content from:', contentUrl);
+      const res = await fetch(contentUrl);
+      if (!res.ok) throw new Error(`Failed to fetch content (${res.status}) from ${contentUrl}`);
       const raw = await res.text();
       setOriginalRaw(raw);
       setOriginalParsed(parseMdh(raw));
@@ -86,10 +89,23 @@ export default function BountyDetailPage() {
     setClaiming(true);
     try {
       await claimBounty(bounty.publicKey);
-      router.push(`/workspace/${bountyId}`);
+      router.push(`/app/workspace/${bountyId}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to claim bounty');
       setClaiming(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!bounty) return;
+    setCancelling(true);
+    try {
+      await cancelBounty({ bountyPda: bounty.publicKey, bountyData: bounty });
+      toast.success('Bounty cancelled — USDC refunded.');
+      router.push('/app/translate');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to cancel bounty');
+      setCancelling(false);
     }
   };
 
@@ -187,16 +203,32 @@ export default function BountyDetailPage() {
           )}
         </div>
 
-        {/* Accept Job — shown only for Open bounties to non-authors */}
+        {/* Accept Job / Cancel — shown only for Open bounties */}
         {isOpen && (
-          <div className="flex justify-end">
+          <div className="flex justify-between items-center">
+            {/* Cancel — author only */}
+            {isAuthor && (
+              <button
+                onClick={handleCancel}
+                disabled={cancelling}
+                className="flex items-center gap-2 px-6 py-3 border border-red-300 text-red-500 rounded-2xl text-sm font-medium hover:bg-red-50 transition-colors disabled:opacity-50"
+              >
+                {cancelling ? (
+                  <><Loader2 size={16} className="animate-spin" /> Cancelling…</>
+                ) : (
+                  <><XCircle size={16} /> Cancel Bounty</>
+                )}
+              </button>
+            )}
+
+            {/* Accept — non-authors */}
             {!activeAddress ? (
-              <p className="text-sm text-stone-500 py-3">Connect your wallet to accept this job.</p>
-            ) : isAuthor ? null : (
+              <p className="text-sm text-stone-500 py-3 ml-auto">Connect your wallet to accept this job.</p>
+            ) : !isAuthor ? (
               <button
                 onClick={handleClaim}
                 disabled={claiming}
-                className="flex items-center gap-2 px-8 py-4 bg-ink text-parchment rounded-2xl font-bold text-base hover:opacity-90 transition-opacity disabled:opacity-50"
+                className="flex items-center gap-2 px-8 py-4 bg-ink text-parchment rounded-2xl font-bold text-base hover:opacity-90 transition-opacity disabled:opacity-50 ml-auto"
               >
                 {claiming ? (
                   <><Loader2 size={18} className="animate-spin" /> Accepting…</>
@@ -204,7 +236,7 @@ export default function BountyDetailPage() {
                   <><CheckCircle size={18} /> Accept Job</>
                 )}
               </button>
-            )}
+            ) : null}
           </div>
         )}
 
@@ -244,7 +276,7 @@ function PendingReviewPanel({
 
   useEffect(() => {
     if (!bounty.translatedTxId) { setLoadingTranslation(false); return; }
-    const gateway = process.env.NEXT_PUBLIC_ARWEAVE_GATEWAY ?? 'https://arweave.net';
+    const gateway = process.env.NEXT_PUBLIC_IRYS_NODE_URL ?? 'https://devnet.irys.xyz';
     fetch(`${gateway}/${bounty.translatedTxId}`)
       .then((r) => {
         if (!r.ok) throw new Error(`Failed to load translation (${r.status})`);

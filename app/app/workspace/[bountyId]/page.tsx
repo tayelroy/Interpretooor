@@ -10,7 +10,7 @@ import { parseMdh, type ParsedMdh } from '@/lib/mdh-utils';
 import MdhRenderer from '@/app/components/MdhRenderer';
 import { toast } from 'sonner';
 
-const ARWEAVE_GATEWAY = process.env.NEXT_PUBLIC_ARWEAVE_GATEWAY ?? 'https://arweave.net';
+const IRYS_GATEWAY = process.env.NEXT_PUBLIC_IRYS_NODE_URL ?? 'https://devnet.irys.xyz';
 
 export default function WorkspacePage() {
   const params = useParams();
@@ -42,11 +42,11 @@ export default function WorkspacePage() {
 
       // Guard: only the claimed translator may access this page
       if (data.translator && activeAddress && data.translator.toBase58() !== activeAddress) {
-        router.replace(`/bounty/${bountyId}`);
+        router.replace(`/app/bounty/${bountyId}`);
         return;
       }
 
-      const res = await fetch(`${ARWEAVE_GATEWAY}/${data.originalTxId}`);
+      const res = await fetch(`${IRYS_GATEWAY}/${data.originalTxId}`);
       if (!res.ok) throw new Error(`Failed to fetch original content (${res.status})`);
       const raw = await res.text();
       setOriginalParsed(parseMdh(raw));
@@ -138,7 +138,7 @@ export default function WorkspacePage() {
         {/* Nav */}
         <div className="flex items-center justify-between mb-10">
           <button
-            onClick={() => router.push(`/bounty/${bountyId}`)}
+            onClick={() => router.push(`/app/bounty/${bountyId}`)}
             className="flex items-center gap-2 text-stone-500 hover:text-ink transition-colors group"
           >
             <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
