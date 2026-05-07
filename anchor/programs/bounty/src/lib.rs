@@ -6,8 +6,9 @@ declare_id!("EZs9aybYZxSdSL8t1fCD2iXcpYHidsYQa44KttCRZFAs");
 /// 48-hour dispute window in seconds
 const REVIEW_WINDOW_SECS: i64 = 48 * 60 * 60;
 
-/// Max on-chain storage for an Arweave transaction ID (base64url, always 43 chars)
-const ARWEAVE_TX_ID_LEN: usize = 43;
+/// Arweave TX IDs are 43 base64url chars; Irys devnet IDs are 44 chars
+const ARWEAVE_TX_ID_MIN: usize = 43;
+const ARWEAVE_TX_ID_MAX: usize = 44;
 
 #[program]
 pub mod translation_bounty {
@@ -23,7 +24,7 @@ pub mod translation_bounty {
         target_language: String,
     ) -> Result<()> {
         require!(
-            original_tx_id.len() == ARWEAVE_TX_ID_LEN,
+            original_tx_id.len() >= ARWEAVE_TX_ID_MIN && original_tx_id.len() <= ARWEAVE_TX_ID_MAX,
             BountyError::InvalidTxId
         );
         require!(reward_amount > 0, BountyError::InvalidAmount);
@@ -90,7 +91,7 @@ pub mod translation_bounty {
         translated_tx_id: String,
     ) -> Result<()> {
         require!(
-            translated_tx_id.len() == ARWEAVE_TX_ID_LEN,
+            translated_tx_id.len() >= ARWEAVE_TX_ID_MIN && translated_tx_id.len() <= ARWEAVE_TX_ID_MAX,
             BountyError::InvalidTxId
         );
 
@@ -205,6 +206,44 @@ pub mod translation_bounty {
             reward_amount,
         );
 
+        Ok(())
+    }
+
+    /// Author cancels an open bounty and reclaims their USDC. Only callable while Open.
+    pub fn cancel_bounty(ctx: Context<CancelBounty>) -> Result<()> {
+        let bounty = &ctx.accounts.bounty_account;
+        require!(
+            bounty.status == BountyStatus::Open,
+            BountyError::InvalidStatus
+        );
+
+        let nonce_bytes = bounty.nonce.to_le_bytes();
+        let author_key = bounty.author;
+        let bump = bounty.bump;
+        let reward_amount = bounty.reward_amount;
+
+        let bounty_seeds: &[&[u8]] = &[
+            b"bounty",
+            author_key.as_ref(),
+            nonce_bytes.as_ref(),
+            &[bump],
+        ];
+        let signer_seeds: &[&[&[u8]]] = &[bounty_seeds];
+
+        token::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                SplTransfer {
+                    from: ctx.accounts.vault.to_account_info(),
+                    to: ctx.accounts.author_token_account.to_account_info(),
+                    authority: ctx.accounts.bounty_account.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            reward_amount,
+        )?;
+
+        msg!("Bounty cancelled by author: {}. Refunded: {}", author_key, reward_amount);
         Ok(())
     }
 
@@ -448,6 +487,41 @@ pub struct ResolveDispute<'info> {
 }
 
 #[derive(Accounts)]
+pub struct CancelBounty<'info> {
+    #[account(mut)]
+    pub author: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"bounty", bounty_account.author.as_ref(), &bounty_account.nonce.to_le_bytes()],
+        bump = bounty_account.bump,
+        constraint = bounty_account.author == author.key() @ BountyError::Unauthorized,
+        close = author,
+    )]
+    pub bounty_account: Account<'info, BountyAccount>,
+
+    #[account(
+        mut,
+        seeds = [b"bounty_vault", bounty_account.key().as_ref()],
+        bump = bounty_account.vault_bump,
+        token::mint = usdc_mint,
+        token::authority = bounty_account,
+    )]
+    pub vault: Account<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        token::mint = usdc_mint,
+        token::authority = author,
+    )]
+    pub author_token_account: Account<'info, TokenAccount>,
+
+    pub usdc_mint: Account<'info, Mint>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 pub struct ExecutePayout<'info> {
     /// Anyone can crank — no signer constraint beyond paying tx fees
     #[account(mut)]
@@ -491,7 +565,7 @@ pub enum BountyError {
     InvalidStatus,
     #[msg("Caller is not authorized for this action")]
     Unauthorized,
-    #[msg("Arweave TX ID must be exactly 43 characters")]
+    #[msg("TX ID must be 43–44 base64url characters")]
     InvalidTxId,
     #[msg("Reward amount must be greater than zero")]
     InvalidAmount,
