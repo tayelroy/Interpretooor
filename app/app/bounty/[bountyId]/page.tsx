@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useWallets } from '@privy-io/react-auth/solana';
 import { PublicKey } from '@solana/web3.js';
-import { ArrowLeft, Download, Loader2, AlertCircle, Globe } from 'lucide-react';
+import { ArrowLeft, Download, CheckCircle, Loader2, AlertCircle, Globe } from 'lucide-react';
 import { useBounty, type BountyAccount } from '@/hooks/useBounty';
 import { parseMdh, exportToMdh, type ParsedMdh } from '@/lib/mdh-utils';
 import MdhRenderer from '@/app/components/MdhRenderer';
@@ -41,13 +41,14 @@ export default function BountyDetailPage() {
   const { wallets } = useWallets();
   const activeAddress = wallets[0]?.address;
 
-  const { fetchBounty } = useBounty();
+  const { fetchBounty, claimBounty } = useBounty();
 
   const [bounty, setBounty] = useState<BountyAccount | null>(null);
   const [originalParsed, setOriginalParsed] = useState<ParsedMdh | null>(null);
   const [originalRaw, setOriginalRaw] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [claiming, setClaiming] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -77,6 +78,18 @@ export default function BountyDetailPage() {
       exportToMdh(originalRaw, `bounty-${bountyId}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Export failed');
+    }
+  };
+
+  const handleClaim = async () => {
+    if (!bounty) return;
+    setClaiming(true);
+    try {
+      await claimBounty(bounty.publicKey);
+      router.push(`/workspace/${bountyId}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to claim bounty');
+      setClaiming(false);
     }
   };
 
@@ -173,6 +186,35 @@ export default function BountyDetailPage() {
             <p className="text-stone-400 text-sm">Content unavailable</p>
           )}
         </div>
+
+        {/* Accept Job — shown only for Open bounties to non-authors */}
+        {isOpen && (
+          <div className="flex justify-end">
+            {!activeAddress ? (
+              <p className="text-sm text-stone-500 py-3">Connect your wallet to accept this job.</p>
+            ) : isAuthor ? null : (
+              <button
+                onClick={handleClaim}
+                disabled={claiming}
+                className="flex items-center gap-2 px-8 py-4 bg-ink text-parchment rounded-2xl font-bold text-base hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                {claiming ? (
+                  <><Loader2 size={18} className="animate-spin" /> Accepting…</>
+                ) : (
+                  <><CheckCircle size={18} /> Accept Job</>
+                )}
+              </button>
+            )}
+          </div>
+        )}
+
+        {!isOpen && !isPendingReview && 'claimed' in bounty.status && (
+          <div className="text-center py-4">
+            <span className="inline-block px-6 py-3 bg-stone-100 text-stone-500 rounded-2xl text-sm font-medium">
+              Job Taken — This bounty has been claimed
+            </span>
+          </div>
+        )}
 
         {/* Pending review: show translated content */}
         {isPendingReview && <PendingReviewPanel bounty={bounty} bountyId={bountyId} isAuthor={isAuthor} onRefresh={load} />}
