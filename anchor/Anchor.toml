@@ -6,7 +6,6 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-vault = "9f14RJZJtiQchjZqvcAmxXNZrpju81bPtHC7c9tcqAqF"
 bounty = "EZs9aybYZxSdSL8t1fCD2iXcpYHidsYQa44KttCRZFAs"
 
 [provider]

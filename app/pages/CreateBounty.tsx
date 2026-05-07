@@ -89,8 +89,8 @@ export default function CreateBounty({ article, onBack, onSuccess }: CreateBount
   const handleCreate = async () => {
     if (!canSubmit) return;
 
-    if (article.arweaveTxId.length !== 43) {
-      setError(`The Arweave transaction ID for this article is not in the expected format (got ${article.arweaveTxId.length} characters instead of 43). Try re-publishing the article.`);
+    if (article.arweaveTxId.length < 43 || article.arweaveTxId.length > 44) {
+      setError(`The Arweave transaction ID for this article is not in the expected format (got ${article.arweaveTxId.length} characters, expected 43–44). Try re-publishing the article.`);
       return;
     }
 

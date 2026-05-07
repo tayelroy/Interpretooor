@@ -7,9 +7,9 @@ export interface MyArticle {
   arweaveTxId: string;
 }
 
-// Arweave TX IDs are 43 base64url chars — strip any URL prefix if present
+// Arweave TX IDs are 43 base64url chars; Irys devnet IDs are 44 chars
 function extractTxId(uri: string): string {
-  const match = uri.match(/([A-Za-z0-9_-]{43})(?:[/?#]|$)/);
+  const match = uri.match(/([A-Za-z0-9_-]{43,44})(?:[/?#]|$)/);
   return match ? match[1] : uri;
 }
 
