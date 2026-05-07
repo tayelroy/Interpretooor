@@ -19,7 +19,7 @@ export default function WorkspacePage() {
   const { wallets } = useWallets();
   const activeAddress = wallets[0]?.address;
 
-  const { fetchBounty } = useBounty();
+  const { fetchBounty, submitTranslation } = useBounty();
 
   const [bounty, setBounty] = useState<BountyAccount | null>(null);
   const [originalParsed, setOriginalParsed] = useState<ParsedMdh | null>(null);
@@ -87,13 +87,16 @@ export default function WorkspacePage() {
     e.target.value = '';
   };
 
-  // Submit handler added in next commit
   const handleSubmit = async () => {
     if (!translatedRaw || !bounty || submitting || submitSuccess) return;
     setSubmitting(true);
     try {
-      // wired in next commit
-      toast.info('Submit not yet wired');
+      // submitTranslation handles Irys upload via the platform relayer then
+      // signs the submit_translation on-chain instruction in one call.
+      await submitTranslation({ bountyPda: bounty.publicKey, translationData: translatedRaw });
+      setSubmitSuccess(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Submission failed — please try again');
     } finally {
       setSubmitting(false);
     }
