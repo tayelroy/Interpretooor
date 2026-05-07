@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Be_Vietnam_Pro, EB_Garamond } from "next/font/google";
-import '@solana/wallet-adapter-react-ui/styles.css';
 import "./globals.css";
 import Providers from "./providers";
 
