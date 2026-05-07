@@ -41,7 +41,7 @@ export default function BountyDetailPage() {
   const { wallets } = useWallets();
   const activeAddress = wallets[0]?.address;
 
-  const { fetchBounty, claimBounty } = useBounty();
+  const { fetchBounty, claimBounty, disputeBounty } = useBounty();
 
   const [bounty, setBounty] = useState<BountyAccount | null>(null);
   const [originalParsed, setOriginalParsed] = useState<ParsedMdh | null>(null);
@@ -224,7 +224,117 @@ export default function BountyDetailPage() {
   );
 }
 
-// Separated out so it can be added cleanly in commit 6
-function PendingReviewPanel(_props: { bounty: BountyAccount; bountyId: string; isAuthor: boolean; onRefresh: () => void }) {
-  return null;
+function PendingReviewPanel({
+  bounty,
+  bountyId,
+  isAuthor,
+  onRefresh,
+}: {
+  bounty: BountyAccount;
+  bountyId: string;
+  isAuthor: boolean;
+  onRefresh: () => void;
+}) {
+  const { disputeBounty } = useBounty();
+  const [translatedParsed, setTranslatedParsed] = useState<ParsedMdh | null>(null);
+  const [loadingTranslation, setLoadingTranslation] = useState(true);
+  const [translationError, setTranslationError] = useState<string | null>(null);
+  const [disputing, setDisputing] = useState(false);
+  const [disputed, setDisputed] = useState(false);
+
+  useEffect(() => {
+    if (!bounty.translatedTxId) { setLoadingTranslation(false); return; }
+    const gateway = process.env.NEXT_PUBLIC_ARWEAVE_GATEWAY ?? 'https://arweave.net';
+    fetch(`${gateway}/${bounty.translatedTxId}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`Failed to load translation (${r.status})`);
+        return r.text();
+      })
+      .then((raw) => setTranslatedParsed(parseMdh(raw)))
+      .catch((err) => setTranslationError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setLoadingTranslation(false));
+  }, [bounty.translatedTxId]);
+
+  const handleDispute = async () => {
+    setDisputing(true);
+    try {
+      await disputeBounty(bounty.publicKey);
+      setDisputed(true);
+      onRefresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Dispute failed');
+    } finally {
+      setDisputing(false);
+    }
+  };
+
+  const submissionTs = bounty.submissionTimestamp.toNumber();
+  const countdown = hoursRemaining(submissionTs);
+
+  return (
+    <div className="mt-6 space-y-6">
+      {/* Timer banner */}
+      <div className="flex items-center justify-between px-6 py-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-800 text-sm">
+        <span className="font-medium">Review window: {countdown}</span>
+        {bounty.translatedTxId && (
+          <span className="font-mono text-xs opacity-70">
+            TX: {bounty.translatedTxId.slice(0, 12)}…
+          </span>
+        )}
+      </div>
+
+      {/* Translated content */}
+      <div className="bg-white rounded-[32px] p-10 border border-stone-200 shadow-sm">
+        <div className="flex justify-between items-center mb-8 pb-4 border-b border-stone-100">
+          <h2 className="text-xl text-ink">Submitted Translation</h2>
+          <span className="text-xs uppercase tracking-widest text-stone-400 font-bold">
+            {bounty.targetLanguage ?? 'Target'}
+          </span>
+        </div>
+
+        {loadingTranslation && (
+          <div className="flex items-center gap-2 text-stone-400 py-8">
+            <Loader2 size={18} className="animate-spin" />
+            <span className="text-sm">Loading translation…</span>
+          </div>
+        )}
+
+        {translationError && (
+          <div className="flex items-start gap-2 text-red-600 text-sm">
+            <AlertCircle size={16} className="mt-0.5 shrink-0" />
+            {translationError}
+          </div>
+        )}
+
+        {translatedParsed && <MdhRenderer parsedMdh={translatedParsed} />}
+
+        {!loadingTranslation && !translationError && !bounty.translatedTxId && (
+          <p className="text-stone-400 text-sm">Translation content not yet available.</p>
+        )}
+      </div>
+
+      {/* Dispute button — author only */}
+      {isAuthor && (
+        <div className="flex justify-end">
+          {disputed ? (
+            <p className="text-sm text-stone-600 bg-stone-100 px-5 py-3 rounded-xl">
+              Dispute submitted. Funds are locked pending admin review.
+            </p>
+          ) : (
+            <button
+              onClick={handleDispute}
+              disabled={disputing}
+              className="flex items-center gap-2 px-8 py-4 border border-red-400 text-red-600 rounded-2xl font-medium hover:bg-red-50 transition-colors disabled:opacity-50"
+            >
+              {disputing ? (
+                <><Loader2 size={18} className="animate-spin" /> Filing Dispute…</>
+              ) : (
+                'Dispute Translation'
+              )}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
