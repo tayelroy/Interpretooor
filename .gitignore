@@ -44,6 +44,10 @@ next-env.d.ts
 /anchor/.anchor/
 /anchor/target/
 
+# backend services
+/backend/**/node_modules/
+/backend/**/dist/
+
 # solana local validator
 test-ledger/
 
