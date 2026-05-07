@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 
 function abbreviateAddress(address: string) {
   if (address.length <= 10) return address;
@@ -39,7 +38,6 @@ export default function ConnectWalletButton() {
 
   return (
     <div className="flex items-center gap-3">
-      <WalletMultiButton className="!rounded-full !bg-parchment !px-5 !py-2 !text-sm !font-semibold !tracking-tight !text-ink hover:!bg-white" />
       {!authenticated ? (
         <button
           onClick={login}
