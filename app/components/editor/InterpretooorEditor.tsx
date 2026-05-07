@@ -25,7 +25,7 @@ import FloatingSemanticToolbar from './FloatingSemanticToolbar';
 import SemanticTooltipPlugin from './SemanticTooltipPlugin';
 import { SemanticNode } from './SemanticNode';
 import { usePrivy } from '@privy-io/react-auth';
-import { useWallet } from '@solana/wallet-adapter-react';
+import { useWallets } from '@privy-io/react-auth/solana';
 import { usePublish } from '@/hooks/usePublish';
 
 const STORAGE_KEY = 'interpretooor_draft';
@@ -195,7 +195,11 @@ function EditorBridge({ onReady }: { onReady: (editor: LexicalEditor) => void })
 
 export default function InterpretooorEditor() {
   const { authenticated, user } = usePrivy();
-  const { connected, publicKey } = useWallet();
+  
+  // 1. Swap useWallet for useSolanaWallets
+  const { wallets: solanaWallets } = useWallets();
+  const activeWallet = solanaWallets[0] || null;
+  
   const [isReady, setIsReady] = useState(false);
   const [draft, setDraft] = useState<DraftDocument>(defaultDraft);
   const [title, setTitle] = useState(defaultDraft.metadata.title);
@@ -205,9 +209,11 @@ export default function InterpretooorEditor() {
   const [editor, setEditor] = useState<LexicalEditor | null>(null);
   const latestContentRef = useRef<unknown>(null);
   const saveTimerRef = useRef<number | null>(null);
+
+  // 2. Map the active Author key strictly from Privy
   const activeAuthorPubkey = useMemo(() => {
-    return publicKey?.toBase58() ?? authorPubkey;
-  }, [authorPubkey, publicKey]);
+    return activeWallet?.address ?? authorPubkey;
+  }, [authorPubkey, activeWallet]);
 
   const { handlePublish, isPublishing, statusText } = usePublish({
     authorPubkey: activeAuthorPubkey,
@@ -219,13 +225,14 @@ export default function InterpretooorEditor() {
   const onPublishClick = async () => {
     console.log('🟢 1. onPublishClick triggered!');
 
-    if (!connected || !publicKey) {
-      console.error('🔴 ERROR: Solana wallet is not connected.');
-      alert('Missing Solana wallet connection. Make sure you are connected.');
+    // 3. Guard against missing Privy wallet instead of Solana adapter
+    if (!activeWallet) {
+      console.error('🔴 ERROR: Privy Solana wallet is not connected.');
+      alert('Missing wallet connection. Make sure you are signed in.');
       return;
     }
 
-    console.log('🟢 2. Solana wallet found. Calling handlePublish...');
+    console.log('🟢 2. Privy wallet found. Calling handlePublish...');
     try {
       const assetId = await handlePublish();
       console.log('🟢 6. handlePublish returned assetId:', assetId);
