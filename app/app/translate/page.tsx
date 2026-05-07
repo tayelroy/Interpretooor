@@ -1,31 +1,22 @@
 "use client";
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import { PublicKey } from '@solana/web3.js';
 import { Loader2, PlusCircle, Languages } from 'lucide-react';
 import Dashboard from '../../pages/Dashboard';
-import Verification from '../../pages/Verification';
 import CreateBounty from '../../pages/CreateBounty';
 import { useMyArticles, type MyArticle } from '../../../hooks/useMyArticles';
 
 type View =
   | { type: 'board' }
-  | { type: 'verification'; bountyPda: PublicKey }
   | { type: 'create'; article: MyArticle };
 
 export default function TranslatePage() {
+  const router = useRouter();
   const [view, setView] = useState<View>({ type: 'board' });
   const { articles, loading: articlesLoading } = useMyArticles();
-
-  if (view.type === 'verification') {
-    return (
-      <Verification
-        bountyPda={view.bountyPda}
-        onBack={() => setView({ type: 'board' })}
-      />
-    );
-  }
 
   if (view.type === 'create') {
     return (
@@ -92,7 +83,7 @@ export default function TranslatePage() {
       )}
 
       <Dashboard
-        onJobSelect={(pda) => setView({ type: 'verification', bountyPda: pda })}
+        onJobSelect={(pda) => router.push(`/bounty/${pda.toBase58()}`)}
         containerClassName={
           hasArticles
             ? 'bg-parchment min-h-screen pt-10 pb-20 px-8'
