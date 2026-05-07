@@ -2,8 +2,9 @@ import { useCallback, useMemo, useState } from 'react';
 import type { LexicalEditor } from 'lexical';
 import { useWallets } from '@privy-io/react-auth/solana';
 import { WebIrys } from '@irys/sdk';
-import { Connection, PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js';
+import { Connection } from '@solana/web3.js';
 import bs58 from 'bs58';
+import { createPrivyToSolanaAdapter } from '@/lib/solana/privy-adapter';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { createSignerFromWalletAdapter } from '@metaplex-foundation/umi-signer-wallet-adapters';
 import { generateSigner, signerIdentity } from '@metaplex-foundation/umi';
@@ -60,41 +61,9 @@ export function usePublish({ authorPubkey, editor, sourceLanguage, title }: UseP
 
       console.log('🟢 4. Building Privy shim for wallet:', activeWallet.address);
 
-      // 2. Build the adapter shim, bridging Privy's Wallet Standard interface
-      //    to the @solana/wallet-adapter shape that Umi and Irys both expect.
-      //
-      //    The key mismatch: Privy's signTransaction expects { transaction: Uint8Array }
-      //    (Wallet Standard), but Umi/Irys hand it a web3.js Transaction object.
-      //    We serialize → sign → deserialize to bridge the gap.
-      const adapterShim = {
-        publicKey: new PublicKey(activeWallet.address),
-
-        signMessage: async (msg: Uint8Array) => {
-          const result = await activeWallet.signMessage({ message: msg });
-          return new Uint8Array(result.signature);
-        },
-
-        signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
-          const isVersioned = 'version' in tx;
-
-          // Serialize to raw bytes — what Privy's Wallet Standard interface requires
-          const serialized: Uint8Array = isVersioned
-            ? (tx as VersionedTransaction).serialize()
-            : (tx as Transaction).serialize({ requireAllSignatures: false });
-
-          // Privy (Wallet Standard) returns { signedTransaction: Uint8Array }
-          const { signedTransaction } = await activeWallet.signTransaction({ transaction: serialized });
-
-          // Reconstruct the correct transaction type from the signed bytes
-          return (isVersioned
-            ? VersionedTransaction.deserialize(signedTransaction)
-            : Transaction.from(signedTransaction)) as T;
-        },
-
-        signAllTransactions: async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
-          return Promise.all(txs.map((tx) => adapterShim.signTransaction(tx)));
-        },
-      };
+      // 2. Bridge Privy's Wallet Standard interface to the adapter shape that
+      //    Umi and Irys expect.
+      const adapterShim = createPrivyToSolanaAdapter(activeWallet);
 
       console.log('🟢 5. Initializing Irys from Privy shim...');
       const irys = await WebIrys.init({

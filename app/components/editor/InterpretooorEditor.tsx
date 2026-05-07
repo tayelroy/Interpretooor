@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { LexicalComposer, type InitialConfigType } from '@lexical/react/LexicalComposer';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
@@ -24,89 +24,9 @@ import StaticToolbarPlugin from './StaticToolbarPlugin';
 import FloatingSemanticToolbar from './FloatingSemanticToolbar';
 import SemanticTooltipPlugin from './SemanticTooltipPlugin';
 import { SemanticNode } from './SemanticNode';
-import { usePrivy } from '@privy-io/react-auth';
 import { useWallets } from '@privy-io/react-auth/solana';
 import { usePublish } from '@/hooks/usePublish';
-
-const STORAGE_KEY = 'interpretooor_draft';
-const AUTHOR_KEY = 'interpretooor_author_pubkey';
-
-type DraftDocument = {
-  content: unknown;
-  metadata: {
-    authorPubkey: string;
-    sourceLanguage: string;
-    title: string;
-  };
-  updatedAt: string;
-  version: 1;
-};
-
-const defaultDraft: DraftDocument = {
-  content: {
-    root: {
-      children: [
-        {
-          children: [{ detail: 0, format: 0, mode: 'normal', style: '', text: '', type: 'text', version: 1 }],
-          direction: 'ltr',
-          format: '',
-          indent: 0,
-          type: 'paragraph',
-          version: 1,
-        },
-      ],
-      direction: 'ltr',
-      format: '',
-      indent: 0,
-      type: 'root',
-      version: 1,
-    },
-  },
-  metadata: {
-    authorPubkey: 'anonymous-author',
-    sourceLanguage: 'English',
-    title: 'Untitled Draft',
-  },
-  updatedAt: new Date().toISOString(),
-  version: 1,
-};
-
-function createInitialDraft(): DraftDocument {
-  if (typeof window === 'undefined') {
-    return defaultDraft;
-  }
-
-  const storedDraft = window.localStorage.getItem(STORAGE_KEY);
-
-  if (!storedDraft) {
-    const authorPubkey = window.localStorage.getItem(AUTHOR_KEY) ?? defaultDraft.metadata.authorPubkey;
-
-    return {
-      ...defaultDraft,
-      metadata: {
-        ...defaultDraft.metadata,
-        authorPubkey,
-      },
-    };
-  }
-
-  try {
-    const parsedDraft = JSON.parse(storedDraft) as DraftDocument;
-
-    return {
-      ...defaultDraft,
-      ...parsedDraft,
-      metadata: {
-        ...defaultDraft.metadata,
-        ...parsedDraft.metadata,
-        authorPubkey:
-          parsedDraft.metadata?.authorPubkey ?? window.localStorage.getItem(AUTHOR_KEY) ?? defaultDraft.metadata.authorPubkey,
-      },
-    };
-  } catch {
-    return defaultDraft;
-  }
-}
+import { useDraftPersistence } from '@/hooks/useDraftPersistence';
 
 function emptyEditorState() {
   $getRoot().clear();
@@ -194,26 +114,22 @@ function EditorBridge({ onReady }: { onReady: (editor: LexicalEditor) => void })
 }
 
 export default function InterpretooorEditor() {
-  const { authenticated, user } = usePrivy();
-  
-  // 1. Swap useWallet for useSolanaWallets
   const { wallets: solanaWallets } = useWallets();
   const activeWallet = solanaWallets[0] || null;
-  
-  const [isReady, setIsReady] = useState(false);
-  const [draft, setDraft] = useState<DraftDocument>(defaultDraft);
-  const [title, setTitle] = useState(defaultDraft.metadata.title);
-  const [sourceLanguage, setSourceLanguage] = useState(defaultDraft.metadata.sourceLanguage);
-  const [authorPubkey, setAuthorPubkey] = useState(defaultDraft.metadata.authorPubkey);
+
   const [isPreview, setIsPreview] = useState(false);
   const [editor, setEditor] = useState<LexicalEditor | null>(null);
-  const latestContentRef = useRef<unknown>(null);
-  const saveTimerRef = useRef<number | null>(null);
 
-  // 2. Map the active Author key strictly from Privy
-  const activeAuthorPubkey = useMemo(() => {
-    return activeWallet?.address ?? authorPubkey;
-  }, [authorPubkey, activeWallet]);
+  const {
+    isReady,
+    draft,
+    title,
+    setTitle,
+    sourceLanguage,
+    setSourceLanguage,
+    activeAuthorPubkey,
+    schedulePersist,
+  } = useDraftPersistence(activeWallet?.address);
 
   const { handlePublish, isPublishing, statusText } = usePublish({
     authorPubkey: activeAuthorPubkey,
@@ -257,87 +173,6 @@ export default function InterpretooorEditor() {
       window.removeEventListener('interpretooor:publish', handlePublishEvent);
     };
   }, [handlePublish, isPublishing, onPublishClick]);
-
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    const initialDraft = createInitialDraft();
-    setDraft(initialDraft);
-    setTitle(initialDraft.metadata.title);
-    setSourceLanguage(initialDraft.metadata.sourceLanguage);
-    setAuthorPubkey(initialDraft.metadata.authorPubkey);
-    setIsReady(true);
-  }, []);
-  /* eslint-enable react-hooks/set-state-in-effect */
-
-  useEffect(() => {
-    if (!isReady) {
-      return;
-    }
-
-    window.localStorage.setItem(AUTHOR_KEY, activeAuthorPubkey);
-  }, [activeAuthorPubkey, isReady]);
-
-  useEffect(() => {
-    if (!isReady) {
-      return;
-    }
-
-    const content = latestContentRef.current ?? draft.content;
-
-    const nextDraft: DraftDocument = {
-      content,
-      metadata: {
-        authorPubkey: activeAuthorPubkey,
-        sourceLanguage,
-        title,
-      },
-      updatedAt: new Date().toISOString(),
-      version: 1,
-    };
-
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextDraft));
-  }, [activeAuthorPubkey, draft.content, isReady, sourceLanguage, title]);
-
-  const persistDraft = useCallback((content: unknown) => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const nextDraft: DraftDocument = {
-      content,
-      metadata: {
-        authorPubkey: activeAuthorPubkey,
-        sourceLanguage,
-        title,
-      },
-      updatedAt: new Date().toISOString(),
-      version: 1,
-    };
-
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextDraft));
-    setDraft(nextDraft);
-  }, [activeAuthorPubkey, sourceLanguage, title]);
-
-  const schedulePersist = (content: unknown) => {
-    latestContentRef.current = content;
-
-    if (saveTimerRef.current) {
-      window.clearTimeout(saveTimerRef.current);
-    }
-
-    saveTimerRef.current = window.setTimeout(() => {
-      persistDraft(content);
-      saveTimerRef.current = null;
-    }, 250);
-  };
-
-  useEffect(() => {
-    if (!isReady || !latestContentRef.current) {
-      return;
-    }
-
-    persistDraft(latestContentRef.current);
-  }, [isReady, persistDraft]);
 
   const initialConfig: InitialConfigType = useMemo(
     () => ({

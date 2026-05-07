@@ -1,14 +1,8 @@
-export interface TranslationResult {
-  translatedText: string;
-  reasoning: {
-    tag: string;
-    source: string;
-    concept?: string;
-    decision: string;
-  }[];
-}
+import type { InterpretationResult } from '@/lib/ai/gemini-interpreter';
 
-export async function interpretText(text: string, targetLang: string = 'English'): Promise<TranslationResult> {
+export type { InterpretationResult };
+
+export async function interpretText(text: string, targetLang: string = 'English'): Promise<InterpretationResult> {
   const response = await fetch('/api/interpret', {
     method: 'POST',
     headers: {
@@ -21,5 +15,5 @@ export async function interpretText(text: string, targetLang: string = 'English'
     throw new Error('Failed to interpret text');
   }
 
-  return (await response.json()) as TranslationResult;
+  return (await response.json()) as InterpretationResult;
 }
