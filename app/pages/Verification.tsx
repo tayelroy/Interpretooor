@@ -1,10 +1,32 @@
 import { motion } from 'motion/react';
 import { useState } from 'react';
-import { ArrowLeft, CheckCircle, Sparkles, BrainCircuit } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Sparkles, BrainCircuit, AlertTriangle } from 'lucide-react';
+import { PublicKey } from '@solana/web3.js';
 import { cn } from '../lib/utils';
+import { useBounty } from '../../hooks/useBounty';
 
-export default function Verification({ onBack }: { onBack: () => void }) {
+interface VerificationProps {
+  bountyPda: PublicKey;
+  onBack: () => void;
+}
+
+export default function Verification({ bountyPda, onBack }: VerificationProps) {
+  const { disputeBounty, claimBounty } = useBounty();
+  const [disputing, setDisputing] = useState(false);
   const [hoveredReason, setHoveredReason] = useState<string | null>(null);
+
+  const handleDispute = async () => {
+    setDisputing(true);
+    try {
+      await disputeBounty(bountyPda);
+    } finally {
+      setDisputing(false);
+    }
+  };
+
+  const handleClaim = async () => {
+    await claimBounty(bountyPda);
+  };
 
   const mockReasoning = [
     { id: 'idiom-1', tag: 'idiom', source: '空気を読む (Kūki o yomu)', literal: 'Read the air', intent: 'Sense the prevailing mood or social context', decision: "Localized as 'Read the room' for natural professional tone.", indices: [32, 45] },
@@ -21,7 +43,10 @@ export default function Verification({ onBack }: { onBack: () => void }) {
 
         <header className="mb-12">
           <h1 className="text-5xl text-ink leading-none mb-4">
-            Verification <span className="text-stone-300 font-serif not-italic tracking-normal">#TR-8924</span>
+            Verification{' '}
+            <span className="text-stone-300 font-mono text-2xl not-italic tracking-normal">
+              {bountyPda.toBase58().slice(0, 8)}…
+            </span>
           </h1>
           <p className="text-stone-500 max-w-2xl leading-relaxed">
             Review the AI-generated translation against the original source text. Verify stylistic nuances and ensure context markers have been appropriately addressed.
@@ -103,11 +128,21 @@ export default function Verification({ onBack }: { onBack: () => void }) {
           </div>
         </div>
 
-        <div className="mt-8 flex justify-end gap-3">
-          <button className="px-10 py-4 border border-ink text-ink rounded-lg font-medium hover:bg-stone-50 transition-colors">Reject</button>
-          <button className="px-10 py-4 bg-pale-lavender text-ink rounded-xl font-bold flex items-center gap-2 hover:opacity-90 transition-opacity">
+        <div className="mt-8 flex justify-between items-center">
+          <button
+            onClick={handleClaim}
+            className="px-8 py-4 bg-pale-lavender text-ink rounded-xl font-bold flex items-center gap-2 hover:opacity-90 transition-opacity"
+          >
             <CheckCircle size={18} />
-            Approve & Anchor
+            Claim Job
+          </button>
+          <button
+            onClick={handleDispute}
+            disabled={disputing}
+            className="px-8 py-4 border border-red-400 text-red-600 rounded-xl font-medium flex items-center gap-2 hover:bg-red-50 transition-colors disabled:opacity-50"
+          >
+            <AlertTriangle size={18} />
+            {disputing ? 'Filing Dispute…' : 'Dispute Translation'}
           </button>
         </div>
       </div>
