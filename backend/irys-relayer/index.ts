@@ -1,12 +1,17 @@
 /**
  * Irys Sponsor Relayer
  *
- * Receives a signed data payload from the client and sponsors the Arweave
+ * Receives a raw .mdh string from the client and sponsors the Arweave
  * upload fee using the platform's server-side Irys node. Users never need to
  * fund an Irys account or hold AR/SOL for storage — the platform covers the
  * fraction-of-a-cent cost per upload.
  *
  * Endpoint: POST /sponsor-upload
+ *   Content-Type: text/plain
+ *   X-Uploader-Address: <wallet pubkey>
+ *   Body: raw .mdh string
+ *
+ * Returns: { id: string } — the Irys transaction ID
  */
 
 import express, { Request, Response } from 'express';
@@ -16,7 +21,7 @@ import 'dotenv/config';
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.text({ type: 'text/plain', limit: '10mb' }));
 
 // ─── Irys node (singleton, lazily initialized) ───────────────────────────────
 
@@ -43,65 +48,50 @@ async function getIrysNode(): Promise<Irys> {
   return node;
 }
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-interface SponsorUploadBody {
-  /** Raw JSON payload to upload (serialized on the client) */
-  data: string;
-  /** Optional Irys tags e.g. [{ name: 'Content-Type', value: 'application/json' }] */
-  tags?: Array<{ name: string; value: string }>;
-  /** Wallet address of the uploader — logged for audit purposes */
-  uploaderAddress: string;
-}
-
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 /**
  * POST /sponsor-upload
  *
- * Body: SponsorUploadBody
- * Returns: { id: string } — the Arweave transaction ID
+ * Accepts a raw .mdh string body (Content-Type: text/plain).
+ * Uploader wallet address is passed via the X-Uploader-Address header.
  *
- * The client should:
- *   1. Serialise their document to JSON
- *   2. POST it here with appropriate tags
- *   3. Use the returned `id` as the `original_tx_id` or `translated_tx_id`
- *      passed to the Solana program instructions
+ * Returns: { id: string } — the Irys transaction ID, used as
+ *   `original_tx_id` or `translated_tx_id` in Solana program instructions.
  */
 app.post('/sponsor-upload', async (req: Request, res: Response) => {
   try {
-    const { data, tags = [], uploaderAddress } = req.body as SponsorUploadBody;
+    const mdhContent = req.body as string;
+    const uploaderAddress = req.headers['x-uploader-address'] as string | undefined;
 
-    if (!data) {
-      res.status(400).json({ error: '`data` field is required' });
+    if (!mdhContent || typeof mdhContent !== 'string') {
+      res.status(400).json({ error: 'Request body must be a non-empty text/plain .mdh string' });
       return;
     }
     if (!uploaderAddress) {
-      res.status(400).json({ error: '`uploaderAddress` field is required' });
+      res.status(400).json({ error: 'X-Uploader-Address header is required' });
       return;
     }
 
-    const defaultTags = [{ name: 'Content-Type', value: 'application/json' }];
-    const allTags = [
-      ...defaultTags,
-      ...tags,
+    const tags = [
+      { name: 'Content-Type', value: 'text/plain' },
+      { name: 'Content-Format', value: 'mdh' },
       { name: 'App-Name', value: 'Interpretooor' },
       { name: 'Uploader', value: uploaderAddress },
     ];
 
     const node = await getIrysNode();
 
-    // Estimate upload cost and top up if needed
-    const dataBuffer = Buffer.from(data, 'utf-8');
+    const dataBuffer = Buffer.from(mdhContent, 'utf-8');
     const price = await node.getPrice(dataBuffer.byteLength);
     const balance = await node.getLoadedBalance();
 
     if (balance.isLessThan(price)) {
-      console.log(`Topping up Irys node. Required: ${price}, Balance: ${balance}`);
+      console.log(`[irys-relayer] Topping up. Required: ${price}, Balance: ${balance}`);
       await node.fund(price.minus(balance).multipliedBy(1.1).integerValue());
     }
 
-    const receipt = await node.upload(dataBuffer, { tags: allTags });
+    const receipt = await node.upload(dataBuffer, { tags });
 
     console.log(`[irys-relayer] Sponsored upload for ${uploaderAddress} → ${receipt.id}`);
 
@@ -123,7 +113,6 @@ app.get('/health', (_req: Request, res: Response) => {
 const PORT = process.env.PORT ?? 4001;
 
 app.listen(PORT, async () => {
-  // Pre-warm the Irys connection on startup
   try {
     await getIrysNode();
     console.log(`[irys-relayer] Irys node ready`);
