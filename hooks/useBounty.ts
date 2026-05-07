@@ -127,10 +127,12 @@ export function useBounty() {
 
   const buildProgram = useCallback(
     (provider: anchor.AnchorProvider): anchor.Program => {
-      // Anchor 0.30: constructor is Program(idl, provider?) — programId lives in the IDL.
-      // We cast to any so the unresolved IDL require() doesn't cause type errors.
+      // Always use BOUNTY_PROGRAM_ID as the authoritative address — overrides
+      // whatever address the IDL file happens to contain after a redeploy.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return new anchor.Program(BOUNTY_IDL as any, provider) as anchor.Program;
+      const idl = { ...(BOUNTY_IDL as any), address: BOUNTY_PROGRAM_ID.toBase58() };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return new anchor.Program(idl as any, provider) as anchor.Program;
     },
     []
   );
@@ -244,6 +246,46 @@ export function useBounty() {
 
       console.log('initializeBounty tx:', sig);
       return bountyPda;
+    },
+    [buildProvider, buildProgram]
+  );
+
+  // ── Phase 1b: Author cancels an open bounty ───────────────────────────────
+
+  /**
+   * `cancelBounty`
+   *
+   * Refunds the USDC escrow to the author and closes the PDA.
+   * Only callable while status is Open (before any translator claims it).
+   */
+  const cancelBounty = useCallback(
+    async (params: {
+      bountyPda: PublicKey;
+      bountyData: BountyAccount;
+    }): Promise<string> => {
+      const { bountyPda, bountyData } = params;
+      const provider = buildProvider();
+      const program = buildProgram(provider);
+      const authorPubkey = provider.wallet.publicKey;
+
+      const [vault] = deriveVaultPda(bountyPda);
+      const authorTokenAccount = getAssociatedTokenAddressSync(USDC_MINT, authorPubkey);
+
+      const sig = await program.methods
+        .cancelBounty()
+        .accounts({
+          author: authorPubkey,
+          bountyAccount: bountyPda,
+          vault,
+          authorTokenAccount,
+          usdcMint: USDC_MINT,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .rpc();
+
+      console.log('cancelBounty tx:', sig);
+      return sig;
     },
     [buildProvider, buildProgram]
   );
@@ -489,6 +531,7 @@ export function useBounty() {
   return {
     // Mutations
     initializeBounty,
+    cancelBounty,
     claimBounty,
     submitTranslation,
     disputeBounty,
