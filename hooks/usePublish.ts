@@ -45,8 +45,11 @@ export function usePublish({ authorPubkey, editor, sourceLanguage, title }: UseP
       const adapterShim = createPrivyToSolanaAdapter(activeWallet);
 
       // ── Serialise editor → .mdh ───────────────────────────────────────────
-      const mdhContent = serialiseLexicalToMdh(editor);
-      if (!mdhContent) throw new Error('Editor is empty — write something before publishing.');
+      const bodyMdh = serialiseLexicalToMdh(editor);
+      if (!bodyMdh) throw new Error('Editor is empty — write something before publishing.');
+      // Prepend the title as a markdown H1 so it's embedded in the .mdh content
+      // and readable without the Solana NFT metadata.
+      const mdhContent = title ? `# ${title}\n\n${bodyMdh}` : bodyMdh;
 
       // ── Upload raw .mdh via the backend relayer ───────────────────────────
       console.log('🟢 5. Uploading .mdh to Irys via relayer...');
