@@ -53,7 +53,11 @@ export function useMyArticles() {
               a.interface === 'MplCoreAsset' &&
               a.content?.json_uri &&
               // Only include assets whose URI looks like an Arweave TX ID
-              /[A-Za-z0-9_-]{43}/.test(a.content.json_uri)
+              /[A-Za-z0-9_-]{43}/.test(a.content.json_uri) &&
+              // Exclude articles with missing or placeholder titles
+              (a.content?.metadata?.name ?? '').trim().length > 0 &&
+              (a.content?.metadata?.name ?? '') !== 'N/A' &&
+              (a.content?.metadata?.name ?? '') !== 'Untitled'
           )
           .map((a) => ({
             assetId: a.id,
