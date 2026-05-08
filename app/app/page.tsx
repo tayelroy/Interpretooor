@@ -1,49 +1,8 @@
 "use client";
 
 import Link from 'next/link';
-
-const mockPosts = [
-  {
-    id: 'art-001',
-    authorInitial: 'E',
-    author: 'Elena Rostova',
-    time: '2h ago',
-    verified: true,
-    title: 'The Ontology of Digital Artifacts in Web3 Spaces',
-    excerpt:
-      'A rigorous examination of how non-fungible tokens represent a fundamental shift in our philosophical understanding of ownership. While traditional property relies on physical exclusion, digital artifacts introduce a paradigm of verifiable scarcity decoupled from material form.',
-    image:
-      'https://lh3.googleusercontent.com/aida/ADBb0ui7TyuofWvAxfCpWoY4pwf6-PnPCRENrBdRo7FqzJXh2lsLLsTTK4TBZAq8_jll4fthRzB5pfoTJ6PXwY0uXNBVv5TW9Ek48FoXgRC2LTrzOug9YOAwmyh2cJ3RjZoX-O-Zk2Ps-MKoP14ehPZdr68DjJo_Y0xQhymomcbYzy-jZy_RMmQYNhIiilZ4ouv1ybDZxCAIcydRBjyHsCbPRuzuB-MSlrYrgJGD6feLXMZLn1UvZApE5o7S0OZyCJhO_mgvhHUfIj0_VA',
-    likes: 245,
-    comments: 42,
-  },
-  {
-    id: 'art-002',
-    authorInitial: 'D',
-    author: 'Dr. Aris Thorne',
-    time: '5h ago',
-    verified: true,
-    title: 'Navigating the Labyrinth: Consensus Mechanisms Decoded',
-    excerpt:
-      'An elegant deconstruction of Byzantine Fault Tolerance, translated with meticulous attention to the mathematical analogies presented in the original text. We explore how trust is mathematically enforced in trustless environments.',
-    image: null,
-    likes: 128,
-    comments: 16,
-  },
-  {
-    id: 'art-003',
-    authorInitial: 'M',
-    author: 'M. Leclerc',
-    time: '1d ago',
-    verified: false,
-    title: 'On the Politics of Translation',
-    excerpt:
-      'Every act of translation is also an act of interpretation. Who decides what is equivalent, and what power does that choice confer? A deep examination of linguistic power structures.',
-    image: null,
-    likes: 89,
-    comments: 11,
-  },
-];
+import { useHomeFeed } from '@/hooks/useHomeFeed';
+import { AlertCircle, Languages } from 'lucide-react';
 
 const upNext = [
   { title: "Satoshi's Literary Style: A Linguistic Analysis", author: 'The Archivist' },
@@ -65,7 +24,28 @@ const sidebarNavItems = [
   { icon: 'person', label: 'Profile', href: '/app/profile', active: false },
 ];
 
+function PostSkeleton() {
+  return (
+    <div className="bg-parchment rounded-[32px] p-8 border border-stone-200 shadow-sm animate-pulse">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-8 h-8 rounded-full bg-stone-200" />
+        <div className="h-3 w-24 bg-stone-200 rounded" />
+        <div className="h-3 w-12 bg-stone-100 rounded" />
+      </div>
+      <div className="h-7 w-4/5 bg-stone-200 rounded mb-2" />
+      <div className="h-7 w-3/5 bg-stone-100 rounded mb-4" />
+      <div className="space-y-2">
+        <div className="h-4 w-full bg-stone-100 rounded" />
+        <div className="h-4 w-5/6 bg-stone-100 rounded" />
+        <div className="h-4 w-4/6 bg-stone-100 rounded" />
+      </div>
+    </div>
+  );
+}
+
 export default function HomeFeed() {
+  const { posts, loading, error } = useHomeFeed();
+
   return (
     <div className="flex-1 max-w-7xl mx-auto w-full px-4 md:px-8 pt-28 pb-8 flex gap-16 items-start relative">
 
@@ -99,27 +79,41 @@ export default function HomeFeed() {
 
       {/* Center Feed */}
       <main className="flex-1 max-w-[600px] mx-auto w-full flex flex-col gap-4">
-        {mockPosts.map((post) => (
-          <Link key={post.id} href={`/app/article/${post.id}`}>
+
+        {error && (
+          <div className="flex items-center gap-3 p-5 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm">
+            <AlertCircle size={18} />
+            {error}
+          </div>
+        )}
+
+        {loading && (
+          <>
+            <PostSkeleton />
+            <PostSkeleton />
+          </>
+        )}
+
+        {!loading && !error && posts.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-32 gap-4 text-stone-400">
+            <Languages size={48} className="opacity-30" />
+            <p className="text-sm">No articles yet. Be the first to publish.</p>
+          </div>
+        )}
+
+        {!loading && posts.map((post) => (
+          <Link key={post.originalTxId} href={`/app/article/${post.originalTxId}`}>
             <article className="bg-parchment rounded-[32px] p-8 border border-stone-200 shadow-sm flex flex-col gap-4 cursor-pointer hover:shadow-md transition-shadow">
               {/* Header */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-surface-dim flex items-center justify-center text-on-surface font-sans text-sm">
-                    {post.authorInitial}
+                    {post.authorShort[0].toUpperCase()}
                   </div>
-                  <span className="font-sans text-sm font-medium text-on-surface">{post.author}</span>
-                  <span className="text-on-surface-variant text-sm">·</span>
-                  <span className="text-on-surface-variant text-sm">{post.time}</span>
-                </div>
-                {post.verified && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-pale-lavender/20 border border-pale-lavender text-on-surface font-sans text-xs">
-                    <span className="material-symbols-outlined text-[16px] text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>
-                      verified
-                    </span>
-                    Verified Translation
+                  <span className="font-sans text-sm font-medium text-on-surface font-mono">
+                    {post.authorShort}…
                   </span>
-                )}
+                </div>
               </div>
 
               {/* Title */}
@@ -128,45 +122,20 @@ export default function HomeFeed() {
               </h2>
 
               {/* Excerpt */}
-              <p className="font-sans text-[16px] text-on-surface-variant line-clamp-3 mt-1">
-                {post.excerpt}
-              </p>
-
-              {/* Image */}
-              {post.image && (
-                <div className="mt-2 w-full h-[280px] rounded-xl overflow-hidden bg-surface-dim">
-                  <img src={post.image} alt="" className="w-full h-full object-cover" />
-                </div>
+              {post.excerpt && (
+                <p className="font-sans text-[16px] text-on-surface-variant line-clamp-3 mt-1">
+                  {post.excerpt}
+                </p>
               )}
 
-              {/* Actions */}
+              {/* Footer: reward */}
               <div className="flex items-center gap-8 mt-2 pt-3 border-t border-stone-200">
-                <button
-                  className="flex items-center gap-1 text-on-surface-variant hover:text-on-surface transition-colors"
-                  onClick={(e) => e.preventDefault()}
-                >
-                  <span className="material-symbols-outlined">favorite_border</span>
-                  <span className="font-sans text-sm">{post.likes}</span>
-                </button>
-                <button
-                  className="flex items-center gap-1 text-on-surface-variant hover:text-on-surface transition-colors"
-                  onClick={(e) => e.preventDefault()}
-                >
-                  <span className="material-symbols-outlined">chat_bubble_outline</span>
-                  <span className="font-sans text-sm">{post.comments}</span>
-                </button>
                 <div className="flex-1" />
                 <button
                   className="text-on-surface-variant hover:text-on-surface transition-colors"
                   onClick={(e) => e.preventDefault()}
                 >
                   <span className="material-symbols-outlined">bookmark_border</span>
-                </button>
-                <button
-                  className="text-on-surface-variant hover:text-on-surface transition-colors"
-                  onClick={(e) => e.preventDefault()}
-                >
-                  <span className="material-symbols-outlined">more_horiz</span>
                 </button>
               </div>
             </article>

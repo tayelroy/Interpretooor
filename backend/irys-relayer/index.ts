@@ -14,7 +14,8 @@
  * Returns: { id: string } — the Irys transaction ID
  */
 
-import express, { Request, Response } from 'express';
+import express from 'express';
+import type { Request, Response } from 'express';
 import cors from 'cors';
 import Irys from '@irys/sdk';
 import 'dotenv/config';
@@ -110,12 +111,16 @@ app.get('/health', (_req: Request, res: Response) => {
 
 // ─── Start ───────────────────────────────────────────────────────────────────
 
-const PORT = process.env.PORT ?? 4001;
+const PORT = Number.parseInt(process.env.PORT ?? '4001', 10) || 4001;
 
 app.listen(PORT, async () => {
   try {
-    await getIrysNode();
-    console.log(`[irys-relayer] Irys node ready`);
+    if (process.env.IRYS_PRIVATE_KEY && process.env.SOLANA_RPC_URL) {
+      await getIrysNode();
+      console.log(`[irys-relayer] Irys node ready`);
+    } else {
+      console.log('[irys-relayer] Skipping Irys pre-warm; missing IRYS_PRIVATE_KEY or SOLANA_RPC_URL');
+    }
   } catch (err) {
     console.error('[irys-relayer] Failed to pre-warm Irys node:', err);
   }

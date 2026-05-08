@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { LexicalComposer, type InitialConfigType } from '@lexical/react/LexicalComposer';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
@@ -20,6 +21,7 @@ import {
   type EditorState,
 } from 'lexical';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
+import Link from 'next/link';
 import StaticToolbarPlugin from './StaticToolbarPlugin';
 import FloatingSemanticToolbar from './FloatingSemanticToolbar';
 import SemanticTooltipPlugin from './SemanticTooltipPlugin';
@@ -114,11 +116,13 @@ function EditorBridge({ onReady }: { onReady: (editor: LexicalEditor) => void })
 }
 
 export default function InterpretooorEditor() {
+  const router = useRouter();
   const { wallets: solanaWallets } = useWallets();
   const activeWallet = solanaWallets[0] || null;
 
   const [isPreview, setIsPreview] = useState(false);
   const [editor, setEditor] = useState<LexicalEditor | null>(null);
+  const [draftsOpen, setDraftsOpen] = useState(false);
 
   const {
     isReady,
@@ -129,6 +133,10 @@ export default function InterpretooorEditor() {
     setSourceLanguage,
     activeAuthorPubkey,
     schedulePersist,
+    composerKey,
+    clearDraft,
+    getSavedDraftKeys,
+    loadDraftByKey,
   } = useDraftPersistence(activeWallet?.address);
 
   const { handlePublish, isPublishing, statusText } = usePublish({
@@ -156,6 +164,7 @@ export default function InterpretooorEditor() {
       if (assetId) {
         console.log(`🟢 7. Final mint complete: ${assetId}`);
         console.log(`🟢 Solscan Devnet: https://solscan.io/token/${assetId}?cluster=devnet`);
+        router.push(`/app/write/success?assetId=${assetId}`);
       }
     } catch (error) {
       console.error('🔴 ERROR in onPublishClick:', error);
@@ -226,6 +235,46 @@ export default function InterpretooorEditor() {
               &lt;
             </button>
             <StatusIndicator />
+            <button
+              type="button"
+              onClick={clearDraft}
+              className="text-xs text-gray-500 hover:text-gray-800 transition-colors"
+            >
+              New Article
+            </button>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setDraftsOpen((o) => !o)}
+                className="text-xs text-gray-500 hover:text-gray-800 transition-colors"
+              >
+                Saved Drafts
+              </button>
+              {draftsOpen && (
+                <div className="absolute top-full left-0 mt-1 w-64 bg-white rounded-xl border border-gray-200 shadow-lg z-50 py-1">
+                  {getSavedDraftKeys().length === 0 ? (
+                    <p className="px-4 py-2 text-xs text-gray-400">No saved drafts</p>
+                  ) : (
+                    getSavedDraftKeys().map((d) => (
+                      <button
+                        key={d.key}
+                        type="button"
+                        onClick={() => { loadDraftByKey(d.key); setDraftsOpen(false); }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 truncate"
+                      >
+                        {d.title}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+            <Link
+              href="/app/translate"
+              className="text-xs text-gray-500 hover:text-gray-800 transition-colors"
+            >
+              Published
+            </Link>
           </div>
 
           <div className="flex items-center gap-3">
@@ -243,7 +292,7 @@ export default function InterpretooorEditor() {
       </header>
 
       <main className="pb-16">
-        <LexicalComposer initialConfig={initialConfig}>
+        <LexicalComposer key={composerKey} initialConfig={initialConfig}>
           <EditorBridge onReady={setEditor} />
           <StaticToolbarPlugin />
 
