@@ -116,9 +116,13 @@ export default function Reader({ assetId }: { assetId: string }) {
                 const Tag = `h${block.level}` as 'h1' | 'h2' | 'h3';
                 return <Tag key={i} className={HEADING_CLASS[block.level]}>{block.text}</Tag>;
               }
+              // TODO: image hosting — strip markdown image syntax until a hosting solution is in place
+              const strippedRaw = block.rawText.replace(/!\[.*?\]\(.*?\)/g, '').trim();
+              if (!strippedRaw) return null;
+              const strippedBlock = { ...block, rawText: strippedRaw };
               return (
                 <p key={i}>
-                  {block.tags.length > 0 ? renderParagraphInline(block) : block.rawText}
+                  {strippedBlock.tags.length > 0 ? renderParagraphInline(strippedBlock) : strippedRaw}
                 </p>
               );
             })}
