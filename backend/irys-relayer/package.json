@@ -2,6 +2,7 @@
   "name": "irys-relayer",
   "version": "1.0.0",
   "description": "Backend Irys relayer — sponsors Arweave uploads on behalf of users",
+  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
