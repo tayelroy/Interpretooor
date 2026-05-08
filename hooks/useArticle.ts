@@ -16,11 +16,6 @@ function extractTxId(uri: string): string {
   return match ? match[1] : uri;
 }
 
-// Arweave TX IDs use base64url and contain _ or -; Solana pubkeys use base58 (no _ or -)
-function isArweaveTxId(id: string): boolean {
-  return /[_-]/.test(id);
-}
-
 function extractTitleFromMdh(rawContent: string, parsedMdh: ParsedMdh): string {
   const blocks = parseMdhBlocks(rawContent, parsedMdh.tags);
   const firstHeading = blocks.find((b) => b.type === 'heading');
@@ -47,15 +42,14 @@ export function useArticle(assetId: string) {
         const gateway =
           process.env.NEXT_PUBLIC_IRYS_GATEWAY ?? 'https://devnet.irys.xyz';
 
-        let arweaveTxId: string;
+        let arweaveTxId = assetId;
         let title = '';
         let author = '';
 
-        if (isArweaveTxId(assetId)) {
-          // Arweave TX ID passed directly — skip DAS lookup
-          arweaveTxId = assetId;
-        } else {
-          // Metaplex asset ID — resolve via Helius DAS
+        // An Arweave TX ID can sometimes look exactly like a Solana Base58 pubkey.
+        // We first try to resolve it via Helius DAS as a Metaplex Asset.
+        // If it fails or isn't found, we fall back to assuming it's a raw Arweave TX ID.
+        try {
           const dasRes = await fetch(process.env.NEXT_PUBLIC_HELIUS_RPC_URL!, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -67,26 +61,33 @@ export function useArticle(assetId: string) {
             }),
           });
 
-          if (!dasRes.ok) throw new Error(`DAS API error: ${dasRes.status}`);
-          const { result } = await dasRes.json();
-
-          title = result?.content?.metadata?.name ?? '';
-          author = result?.ownership?.owner ?? '';
-          arweaveTxId = extractTxId(result?.content?.json_uri ?? '');
-
-          if (!arweaveTxId) throw new Error('Asset has no Arweave TX ID');
+          if (dasRes.ok) {
+            const { result, error: dasError } = await dasRes.json();
+            if (!dasError && result?.content?.json_uri) {
+              title = result.content?.metadata?.name ?? '';
+              author = result.ownership?.owner ?? '';
+              arweaveTxId = extractTxId(result.content.json_uri) || assetId;
+            }
+          }
+        } catch (dasErr) {
+          console.warn('[useArticle] DAS lookup failed, treating as raw Arweave ID:', dasErr);
         }
 
         // Fetch raw .mdh from gateway
         const mdhRes = await fetch(`${gateway}/${arweaveTxId}`);
-        if (!mdhRes.ok) throw new Error(`Gateway fetch failed: ${mdhRes.status}`);
+        if (!mdhRes.ok) {
+          if (mdhRes.status === 404) {
+            throw new Error('Article not found on the decentralized storage gateway (it may have been purged from devnet).');
+          }
+          throw new Error(`Gateway fetch failed: ${mdhRes.status}`);
+        }
 
         const rawContent = await mdhRes.text();
         const parsedMdh = parseMdh(rawContent);
 
         // Fall back to first heading in the .mdh if DAS gave no title
         if (!title) {
-          title = extractTitleFromMdh(rawContent, parsedMdh) || 'Untitled';
+          title = extractTitleFromMdh(rawContent, parsedMdh) || `${arweaveTxId.slice(0, 12)}…`;
         }
 
         if (!cancelled) setData({ title, author, arweaveTxId, parsedMdh });

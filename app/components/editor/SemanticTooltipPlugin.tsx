@@ -28,45 +28,38 @@ export default function SemanticTooltipPlugin({ enabled }: SemanticTooltipPlugin
 
     editor.setEditable(false);
 
-    return editor.registerRootListener((rootElement, previousRootElement) => {
-      const handlePointerMove = (event: PointerEvent) => {
-        const target = event.target;
+    const handlePointerMove = (event: PointerEvent) => {
+      const target = event.target;
 
-        if (!(target instanceof Element)) {
-          setTooltip(null);
-          return;
-        }
-
-        const semanticElement = target.closest<HTMLElement>('[data-semantic-tag]');
-
-        if (!semanticElement) {
-          setTooltip(null);
-          return;
-        }
-
-        setTooltip({
-          note: semanticElement.dataset.semanticNote ?? '',
-          tag: semanticElement.dataset.semanticTag ?? 'semantic',
-          x: event.clientX,
-          y: event.clientY,
-        });
-      };
-
-      const clearTooltip = () => setTooltip(null);
-
-      previousRootElement?.removeEventListener('pointermove', handlePointerMove);
-      previousRootElement?.removeEventListener('pointerleave', clearTooltip);
-
-      if (rootElement) {
-        rootElement.addEventListener('pointermove', handlePointerMove);
-        rootElement.addEventListener('pointerleave', clearTooltip);
+      if (!(target instanceof Element)) {
+        setTooltip(null);
+        return;
       }
 
-      return () => {
-        rootElement?.removeEventListener('pointermove', handlePointerMove);
-        rootElement?.removeEventListener('pointerleave', clearTooltip);
-      };
-    });
+      const semanticElement = target.closest<HTMLElement>('[data-semantic-tag]');
+
+      if (!semanticElement) {
+        setTooltip(null);
+        return;
+      }
+
+      setTooltip({
+        note: semanticElement.dataset.semanticNote ?? '',
+        tag: semanticElement.dataset.semanticTag ?? 'semantic',
+        x: event.clientX,
+        y: event.clientY,
+      });
+    };
+
+    const clearTooltip = () => setTooltip(null);
+
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerleave', clearTooltip);
+
+    return () => {
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerleave', clearTooltip);
+    };
   }, [editor, enabled]);
 
   if (!tooltip || typeof document === 'undefined') {

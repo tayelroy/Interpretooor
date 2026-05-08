@@ -11,8 +11,9 @@ import {
   UNDO_COMMAND,
 } from 'lexical';
 import { INSERT_ORDERED_LIST_COMMAND, INSERT_UNORDERED_LIST_COMMAND } from '@lexical/list';
-import { $createQuoteNode } from '@lexical/rich-text';
+import { $createQuoteNode, $createHeadingNode, type HeadingTagType } from '@lexical/rich-text';
 import { $setBlocksType } from '@lexical/selection';
+import { INSERT_HORIZONTAL_RULE_COMMAND } from '@lexical/react/LexicalHorizontalRuleNode';
 
 type ToolbarButtonProps = {
   label: string;
@@ -80,6 +81,15 @@ export default function StaticToolbarPlugin() {
     editor.dispatchCommand(FORMAT_TEXT_COMMAND, format);
   };
 
+  const applyHeading = (headingSize: HeadingTagType) => {
+    editor.update(() => {
+      const selection = $getSelection();
+      if ($isRangeSelection(selection)) {
+        $setBlocksType(selection, () => $createHeadingNode(headingSize));
+      }
+    });
+  };
+
   const applyQuote = () => {
     editor.update(() => {
       const selection = $getSelection();
@@ -103,11 +113,17 @@ export default function StaticToolbarPlugin() {
   };
 
   return (
-    <div className="sticky top-[65px] z-30 border-b border-gray-100 bg-white/95 backdrop-blur">
-      <div className="mx-auto flex max-w-3xl items-center justify-center gap-1 px-4 py-3">
+    <div className="sticky top-[138px] z-30 border-b border-gray-100 bg-white/95 backdrop-blur">
+      <div className="mx-auto flex max-w-3xl items-center justify-center gap-1 px-4 py-3 flex-wrap">
         {buttons.map((button) => (
           <ToolbarButton key={button.label} label={button.label} onClick={button.onClick} icon={button.icon} />
         ))}
+
+        <Divider />
+
+        <ToolbarButton label="H1" onClick={() => applyHeading('h1')} icon={<span className="font-bold text-xs">H1</span>} />
+        <ToolbarButton label="H2" onClick={() => applyHeading('h2')} icon={<span className="font-bold text-xs">H2</span>} />
+        <ToolbarButton label="H3" onClick={() => applyHeading('h3')} icon={<span className="font-bold text-xs">H3</span>} />
 
         <Divider />
 
@@ -221,6 +237,57 @@ export default function StaticToolbarPlugin() {
                 <path d="M2.5 4h1v3m0 0h-1m1 0h1" />
                 <path d="M6 5h7M6 8h7M6 11h7" />
                 <path d="M2.5 9.5h1v3m0 0h-1m1 0h1" />
+              </svg>
+            </Icon>
+          }
+        />
+        <ToolbarButton
+          label="Divider"
+          onClick={() => editor.dispatchCommand(INSERT_HORIZONTAL_RULE_COMMAND, undefined)}
+          icon={
+            <Icon>
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 8h12" />
+              </svg>
+            </Icon>
+          }
+        />
+        <ToolbarButton
+          label="Image"
+          onClick={() => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.onchange = async (e) => {
+              const file = (e.target as HTMLInputElement).files?.[0];
+              if (!file) return;
+              
+              const formData = new FormData();
+              formData.append('file', file);
+              
+              try {
+                const res = await fetch('/api/upload-image', {
+                  method: 'POST',
+                  body: formData,
+                });
+                const data = await res.json();
+                if (data.url) {
+                  // TODO: image upload — requires custom ImageNode
+                  console.log(`Image uploaded to ${data.url}`);
+                  alert('Image upload requires custom ImageNode');
+                }
+              } catch (err) {
+                console.error(err);
+              }
+            };
+            input.click();
+          }}
+          icon={
+            <Icon>
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="3" width="12" height="10" rx="2" ry="2"/>
+                <circle cx="5" cy="6" r="1.5"/>
+                <path d="M2 10l3.5-3.5 6.5 6.5"/>
               </svg>
             </Icon>
           }
