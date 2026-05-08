@@ -97,6 +97,27 @@ export function deriveVaultPda(bountyAccount: PublicKey): [PublicKey, number] {
   );
 }
 
+// ─── Validation ──────────────────────────────────────────────────────────────
+
+function isValidBountyAccount(b: BountyAccount): boolean {
+  return (
+    // Must have a real Arweave TX ID (43–44 base64url chars)
+    /^[A-Za-z0-9_-]{43,44}$/.test(b.originalTxId) &&
+    // Must have a non-zero reward
+    b.rewardAmount.gtn(0) &&
+    // Must have a real author pubkey (not default/zero)
+    !b.author.equals(PublicKey.default) &&
+    // Must have a valid status key
+    (
+      'open' in b.status ||
+      'claimed' in b.status ||
+      'pendingReview' in b.status ||
+      'disputed' in b.status ||
+      'paid' in b.status
+    )
+  );
+}
+
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 export function useBounty() {
@@ -485,7 +506,11 @@ export function useBounty() {
       const program = buildProgram(provider);
       const raw = await // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (program.account as any)['bountyAccount'].fetch(bountyPda);
-      return { publicKey: bountyPda, ...(raw as Omit<BountyAccount, 'publicKey'>) };
+      const account: BountyAccount = { publicKey: bountyPda, ...(raw as Omit<BountyAccount, 'publicKey'>) };
+      if (!isValidBountyAccount(account)) {
+        throw new Error(`BountyAccount ${bountyPda.toBase58()} failed validation`);
+      }
+      return account;
     },
     [buildProvider, buildProgram]
   );
@@ -507,8 +532,10 @@ export function useBounty() {
         })
       );
 
-      if (!statusFilter) return mapped;
-      return mapped.filter((b: BountyAccount) => statusFilter in b.status);
+      const valid = mapped.filter(isValidBountyAccount);
+
+      if (!statusFilter) return valid;
+      return valid.filter((b: BountyAccount) => statusFilter in b.status);
     },
     [buildProvider, buildProgram]
   );
