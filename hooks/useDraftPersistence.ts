@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { LexicalEditor } from 'lexical';
+import { deserialiseMdhToLexical } from '@/lib/mdh-lexical-bridge';
 
 const STORAGE_KEY = 'interpretooor_draft';
 const AUTHOR_KEY = 'interpretooor_author_pubkey';
@@ -76,7 +78,7 @@ function createInitialDraft(): DraftDocument {
  * Accepts the active wallet address so the stored author pubkey stays in
  * sync with whoever is signed in.
  */
-export function useDraftPersistence(walletAddress?: string) {
+export function useDraftPersistence(walletAddress?: string, editor?: LexicalEditor | null) {
   const [isReady, setIsReady] = useState(false);
   const [draft, setDraft] = useState<DraftDocument>(defaultDraft);
   const [title, setTitle] = useState(defaultDraft.metadata.title);
@@ -106,6 +108,18 @@ export function useDraftPersistence(walletAddress?: string) {
     setAuthorPubkey(initialDraft.metadata.authorPubkey);
     setIsReady(true);
   }, []);
+
+  // When a draft was saved as a raw .mdh string (e.g. fetched from Arweave),
+  // hydrate the editor once it becomes available. Legacy Lexical JSON drafts
+  // (identified by having a "root" key) continue to load via initialConfig.
+  useEffect(() => {
+    if (!isReady || !editor) return;
+    const content = initialContentRef.current;
+    const isLegacyFormat = typeof content === 'object' && content !== null && 'root' in (content as object);
+    if (!isLegacyFormat && typeof content === 'string') {
+      deserialiseMdhToLexical(content, editor);
+    }
+  }, [isReady, editor]);
 
   // Keep author pubkey in localStorage in sync with the active wallet
   useEffect(() => {
