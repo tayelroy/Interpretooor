@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { LexicalComposer, type InitialConfigType } from '@lexical/react/LexicalComposer';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
@@ -114,6 +115,7 @@ function EditorBridge({ onReady }: { onReady: (editor: LexicalEditor) => void })
 }
 
 export default function InterpretooorEditor() {
+  const router = useRouter();
   const { wallets: solanaWallets } = useWallets();
   const activeWallet = solanaWallets[0] || null;
 
@@ -156,6 +158,7 @@ export default function InterpretooorEditor() {
       if (assetId) {
         console.log(`🟢 7. Final mint complete: ${assetId}`);
         console.log(`🟢 Solscan Devnet: https://solscan.io/token/${assetId}?cluster=devnet`);
+        router.push(`/app/write/success?assetId=${assetId}`);
       }
     } catch (error) {
       console.error('🔴 ERROR in onPublishClick:', error);
