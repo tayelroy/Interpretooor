@@ -22,6 +22,7 @@ import {
 } from 'lexical';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
 import StaticToolbarPlugin from './StaticToolbarPlugin';
 import FloatingSemanticToolbar from './FloatingSemanticToolbar';
 import SemanticTooltipPlugin from './SemanticTooltipPlugin';
@@ -113,6 +114,27 @@ function EditorBridge({ onReady }: { onReady: (editor: LexicalEditor) => void })
   }, [editor, onReady]);
 
   return null;
+}
+
+function LexicalPreview() {
+  const [editor] = useLexicalComposerContext();
+  const [html, setHtml] = useState('');
+
+  useEffect(() => {
+    editor.getEditorState().read(() => {
+      const root = editor.getRootElement();
+      if (root) {
+        setHtml(root.innerHTML);
+      }
+    });
+  }, [editor]);
+
+  return (
+    <div
+      className="min-h-[60vh] w-full border-none bg-transparent text-lg leading-relaxed text-ink/90 md:text-xl"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
 }
 
 export default function InterpretooorEditor() {
@@ -223,16 +245,17 @@ export default function InterpretooorEditor() {
 
   return (
     <div className="min-h-screen bg-white text-ink">
-      <header className="sticky top-[70px] z-40 w-full border-b border-gray-100 bg-white">
+      <header className="sticky top-0 z-40 w-full border-b border-gray-100 bg-white">
         <div className="flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-4">
             <button
               type="button"
               onClick={() => window.history.back()}
-              className="text-xl leading-none text-gray-700 transition-colors hover:text-gray-900"
+              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 transition-colors"
               aria-label="Go back"
             >
-              &lt;
+              <ArrowLeft className="w-4 h-4" />
+              Back
             </button>
             <StatusIndicator />
             <button
@@ -284,7 +307,7 @@ export default function InterpretooorEditor() {
               className="rounded-full bg-gray-100 px-4 py-2 text-sm font-medium text-gray-900 transition-colors hover:bg-gray-200"
               aria-pressed={isPreview}
             >
-              Preview
+              {isPreview ? 'Edit' : 'Preview'}
             </button>
             <PublishControls disabled={isPublishing} isPublishing={isPublishing} onClick={onPublishClick} statusText={statusText} />
           </div>
@@ -294,22 +317,32 @@ export default function InterpretooorEditor() {
       <main className="pb-16">
         <LexicalComposer key={composerKey} initialConfig={initialConfig}>
           <EditorBridge onReady={setEditor} />
-          <StaticToolbarPlugin />
+          {!isPreview && <StaticToolbarPlugin />}
 
           <div className="mx-auto mt-8 w-full max-w-3xl px-4">
-            <div className="space-y-4">
+            <div className={`space-y-4 ${isPreview ? 'hidden' : 'block'}`}>
               <p className="text-[10px] uppercase tracking-[0.34em] text-muted-ash">Writing View</p>
               <AutoSizingTitle value={title} onChange={setTitle} />
             </div>
+            
+            {isPreview && (
+              <div className="space-y-4 mb-8">
+                <p className="text-[10px] uppercase tracking-[0.34em] text-muted-ash">Preview View</p>
+                <h1 className="font-serif text-5xl font-bold leading-tight tracking-tight text-ink md:text-6xl">{title || 'Untitled Draft'}</h1>
+              </div>
+            )}
 
             <div className="relative mt-8">
-              <RichTextPlugin
-                contentEditable={
-                  <ContentEditable className="min-h-[60vh] w-full border-none bg-transparent text-lg leading-relaxed outline-none caret-black focus:outline-none md:text-xl" />
-                }
-                placeholder={<EditorPlaceholder />}
-                ErrorBoundary={({ children }) => children}
-              />
+              <div className={isPreview ? 'hidden' : 'block'}>
+                <RichTextPlugin
+                  contentEditable={
+                    <ContentEditable className="min-h-[60vh] w-full border-none bg-transparent text-lg leading-relaxed outline-none caret-black focus:outline-none md:text-xl" />
+                  }
+                  placeholder={<EditorPlaceholder />}
+                  ErrorBoundary={({ children }) => children}
+                />
+              </div>
+              {isPreview && <LexicalPreview />}
               <HistoryPlugin />
               <MarkdownShortcutPlugin />
               <OnChangePlugin
