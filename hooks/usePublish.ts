@@ -1,7 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { LexicalEditor } from 'lexical';
-import { $getRoot } from 'lexical';
-import { $isHeadingNode } from '@lexical/rich-text';
 import { useWallets } from '@privy-io/react-auth/solana';
 import { Connection } from '@solana/web3.js';
 import bs58 from 'bs58';
@@ -11,7 +9,7 @@ import { createSignerFromWalletAdapter } from '@metaplex-foundation/umi-signer-w
 import { generateSigner, signerIdentity } from '@metaplex-foundation/umi';
 import { createV2, mplCore } from '@metaplex-foundation/mpl-core';
 import { Buffer } from 'buffer';
-import { $isSemanticNode } from '@/app/components/editor/SemanticNode';
+import { serialiseLexicalToMdh } from '@/lib/mdh-lexical-bridge';
 
 type UsePublishParams = {
   authorPubkey: string;
@@ -19,49 +17,6 @@ type UsePublishParams = {
   sourceLanguage: string;
   title: string;
 };
-
-/**
- * Walk the Lexical editor state and produce a raw .mdh string.
- *
- * SemanticNodes become `<tag=note> phrase </tag>`.
- * Heading blocks get markdown `#` prefixes.
- * All other blocks become plain paragraphs separated by double newlines.
- */
-function editorStateToMdh(editor: LexicalEditor): string {
-  let output = '';
-
-  editor.getEditorState().read(() => {
-    const blocks = $getRoot().getChildren();
-
-    for (const block of blocks) {
-      const inlines = 'getChildren' in block
-        ? (block as { getChildren: () => import('lexical').LexicalNode[] }).getChildren()
-        : [];
-
-      let blockText = '';
-      for (const node of inlines) {
-        if ($isSemanticNode(node)) {
-          const tag = node.getSemanticTag();
-          const note = node.getSemanticNote();
-          blockText += `<${tag}=${note}> ${node.getTextContent()} </${tag}>`;
-        } else {
-          blockText += node.getTextContent();
-        }
-      }
-
-      if (!blockText.trim()) continue;
-
-      if ($isHeadingNode(block)) {
-        const level = parseInt(block.getTag()[1], 10);
-        output += '#'.repeat(level) + ' ' + blockText + '\n\n';
-      } else {
-        output += blockText + '\n\n';
-      }
-    }
-  });
-
-  return output.trim();
-}
 
 export function usePublish({ authorPubkey, editor, sourceLanguage, title }: UsePublishParams) {
   const { wallets: solanaWallets } = useWallets();
@@ -90,7 +45,7 @@ export function usePublish({ authorPubkey, editor, sourceLanguage, title }: UseP
       const adapterShim = createPrivyToSolanaAdapter(activeWallet);
 
       // ── Serialise editor → .mdh ───────────────────────────────────────────
-      const mdhContent = editorStateToMdh(editor);
+      const mdhContent = serialiseLexicalToMdh(editor);
       if (!mdhContent) throw new Error('Editor is empty — write something before publishing.');
 
       // ── Upload raw .mdh via the backend relayer ───────────────────────────
