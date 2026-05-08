@@ -113,21 +113,7 @@ export default function HomeFeed() {
                   <span className="font-sans text-sm font-medium text-on-surface font-mono">
                     {post.authorShort}…
                   </span>
-                  {post.targetLanguage && (
-                    <>
-                      <span className="text-on-surface-variant text-sm">·</span>
-                      <span className="text-on-surface-variant text-sm">→ {post.targetLanguage}</span>
-                    </>
-                  )}
                 </div>
-                {post.isPaid && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-pale-lavender/20 border border-pale-lavender text-on-surface font-sans text-xs">
-                    <span className="material-symbols-outlined text-[16px] text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>
-                      verified
-                    </span>
-                    Verified Translation
-                  </span>
-                )}
               </div>
 
               {/* Title */}
@@ -144,9 +130,6 @@ export default function HomeFeed() {
 
               {/* Footer: reward */}
               <div className="flex items-center gap-8 mt-2 pt-3 border-t border-stone-200">
-                <span className="font-sans text-sm text-on-surface-variant">
-                  {post.rewardUsdc.toFixed(2)} USDC bounty
-                </span>
                 <div className="flex-1" />
                 <button
                   className="text-on-surface-variant hover:text-on-surface transition-colors"
