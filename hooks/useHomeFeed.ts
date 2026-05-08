@@ -1,21 +1,40 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useBounty, type BountyAccount } from './useBounty';
 import { parseMdh } from '@/lib/mdh-utils';
 import { parseMdhBlocks } from '@/lib/mdh-block-parser';
 import { stripTags } from '@/lib/mdh-utils';
 
 export interface HomeFeedPost {
-  bountyId: string;
+  assetId: string;
   originalTxId: string;
-  targetLanguage: string;
-  rewardUsdc: number;
   authorShort: string;
-  isPaid: boolean;
   title: string;
   excerpt: string;
 }
+
+const ARWEAVE_GRAPHQL =
+  (process.env.NEXT_PUBLIC_IRYS_GATEWAY ?? 'https://devnet.irys.xyz') + '/graphql';
+
+const FEED_QUERY = `
+  query InterpretooorFeed($first: Int!) {
+    transactions(
+      tags: [
+        { name: "App-Name",       values: ["Interpretooor"] }
+        { name: "Content-Format", values: ["mdh"] }
+      ]
+      first: $first
+      order: DESC
+    ) {
+      edges {
+        node {
+          id
+          tags { name value }
+        }
+      }
+    }
+  }
+`;
 
 function extractPreview(rawContent: string): { title: string; excerpt: string } {
   const { tags } = parseMdh(rawContent);
@@ -34,7 +53,6 @@ function extractPreview(rawContent: string): { title: string; excerpt: string } 
 }
 
 export function useHomeFeed() {
-  const { fetchAllBounties } = useBounty();
   const [posts, setPosts] = useState<HomeFeedPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,47 +61,61 @@ export function useHomeFeed() {
     setLoading(true);
     setError(null);
     try {
-      const all = await fetchAllBounties();
-      // Previously filtered for 'paid' or 'pendingReview', which hid new articles.
-      // Now we show all valid bounties on the home feed.
-      const readable = all;
+      // Query Arweave GraphQL for all transactions tagged App-Name=Interpretooor + Content-Format=mdh.
+      // This is the authoritative source — the relayer sets these tags on every upload.
+      const gqlRes = await fetch(ARWEAVE_GRAPHQL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: FEED_QUERY, variables: { first: 50 } }),
+      });
 
-      const gateway =
-        process.env.NEXT_PUBLIC_IRYS_GATEWAY ?? 'https://devnet.irys.xyz';
+      if (!gqlRes.ok) throw new Error(`Arweave GraphQL error: ${gqlRes.status}`);
+      const { data, errors } = await gqlRes.json();
+      if (errors?.length) throw new Error(errors[0].message);
+
+      const edges: Array<{ node: { id: string; tags: { name: string; value: string }[] } }> =
+        data?.transactions?.edges ?? [];
+
+      const gateway = process.env.NEXT_PUBLIC_IRYS_GATEWAY ?? 'https://devnet.irys.xyz';
 
       const enriched = await Promise.all(
-        readable.map(async (b: BountyAccount): Promise<HomeFeedPost> => {
+        edges.map(async ({ node }): Promise<HomeFeedPost | null> => {
+          const txId = node.id;
+          const uploader = node.tags.find((t) => t.name === 'Uploader')?.value ?? '';
+
           let title = '';
           let excerpt = '';
+
           try {
-            const res = await fetch(`${gateway}/${b.originalTxId}`);
-            if (res.ok) {
-              ({ title, excerpt } = extractPreview(await res.text()));
-            }
+            const mdhRes = await fetch(`${gateway}/${txId}`);
+            if (!mdhRes.ok) return null;
+            const raw = await mdhRes.text();
+            const preview = extractPreview(raw);
+            title = preview.title;
+            excerpt = preview.excerpt;
           } catch {
-            // non-fatal — fall back to truncated TX ID
+            return null;
           }
 
+          if (!title) title = `${txId.slice(0, 12)}…`;
+
           return {
-            bountyId: b.publicKey.toBase58(),
-            originalTxId: b.originalTxId,
-            targetLanguage: b.targetLanguage,
-            rewardUsdc: b.rewardAmount.toNumber() / 1_000_000,
-            authorShort: b.author.toBase58().slice(0, 8),
-            isPaid: 'paid' in b.status,
-            title: title || `${b.originalTxId.slice(0, 12)}…`,
+            assetId: txId,
+            originalTxId: txId,
+            authorShort: uploader.slice(0, 8),
+            title,
             excerpt,
           };
         })
       );
 
-      setPosts(enriched);
+      setPosts(enriched.filter((p): p is HomeFeedPost => p !== null));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
-  }, [fetchAllBounties]);
+  }, []);
 
   useEffect(() => {
     void load();
