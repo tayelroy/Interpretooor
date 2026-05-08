@@ -11,6 +11,10 @@ export interface HomeFeedPost {
   authorShort: string;
   title: string;
   excerpt: string;
+  readingTime: number;
+  tagCount: number;
+  tagKeys: string[];
+  timestamp?: number;
 }
 
 const ARWEAVE_GRAPHQL =
@@ -36,7 +40,15 @@ const FEED_QUERY = `
   }
 `;
 
-function extractPreview(rawContent: string): { title: string; excerpt: string } {
+interface Preview {
+  title: string;
+  excerpt: string;
+  readingTime: number;
+  tagCount: number;
+  tagKeys: string[];
+}
+
+function extractPreview(rawContent: string): Preview {
   const { tags } = parseMdh(rawContent);
   const blocks = parseMdhBlocks(rawContent, tags);
 
@@ -49,7 +61,12 @@ function extractPreview(rawContent: string): { title: string; excerpt: string } 
       ? stripTags(firstPara.rawText).slice(0, 200).replace(/\n/g, ' ').trim()
       : '';
 
-  return { title, excerpt };
+  const wordCount = stripTags(rawContent).split(/\s+/).filter(Boolean).length;
+  const readingTime = Math.max(1, Math.ceil(wordCount / 200));
+  const tagCount = tags.length;
+  const tagKeys = [...new Set(tags.map((t) => t.key))];
+
+  return { title, excerpt, readingTime, tagCount, tagKeys };
 }
 
 export function useHomeFeed() {
@@ -82,9 +99,14 @@ export function useHomeFeed() {
         edges.map(async ({ node }): Promise<HomeFeedPost | null> => {
           const txId = node.id;
           const uploader = node.tags.find((t) => t.name === 'Uploader')?.value ?? '';
+          const timestampTag = node.tags.find((t) => t.name === 'Timestamp')?.value;
+          const timestamp = timestampTag ? parseInt(timestampTag, 10) : undefined;
 
           let title = '';
           let excerpt = '';
+          let readingTime = 1;
+          let tagCount = 0;
+          let tagKeys: string[] = [];
 
           try {
             const mdhRes = await fetch(`${gateway}/${txId}`);
@@ -93,6 +115,9 @@ export function useHomeFeed() {
             const preview = extractPreview(raw);
             title = preview.title;
             excerpt = preview.excerpt;
+            readingTime = preview.readingTime;
+            tagCount = preview.tagCount;
+            tagKeys = preview.tagKeys;
           } catch {
             return null;
           }
@@ -105,6 +130,10 @@ export function useHomeFeed() {
             authorShort: uploader.slice(0, 8),
             title,
             excerpt,
+            readingTime,
+            tagCount,
+            tagKeys,
+            timestamp,
           };
         })
       );

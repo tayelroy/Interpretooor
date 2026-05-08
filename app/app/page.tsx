@@ -2,7 +2,28 @@
 
 import Link from 'next/link';
 import { useHomeFeed } from '@/hooks/useHomeFeed';
-import { AlertCircle, Languages } from 'lucide-react';
+import {
+  AlertCircle, Clock, Languages,
+  Home, Inbox, MessageSquare, Bell, Compass, LayoutDashboard, User,
+  Bookmark, Search,
+} from 'lucide-react';
+
+const TAG_KEY_COLORS: Record<string, string> = {
+  tone:    'bg-amber-100 text-amber-800',
+  culture: 'bg-teal-100 text-teal-800',
+  intent:  'bg-purple-100 text-purple-800',
+  idiom:   'bg-orange-100 text-orange-800',
+};
+const FALLBACK_TAG_COLOR = 'bg-stone-100 text-stone-600';
+
+function formatTimestamp(ts: number): string {
+  const diff = Math.floor(Date.now() / 1000) - ts;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 86400 * 30) return `${Math.floor(diff / 86400)}d ago`;
+  return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
 
 const upNext = [
   { title: "Satoshi's Literary Style: A Linguistic Analysis", author: 'The Archivist' },
@@ -15,13 +36,13 @@ const recommendedTranslators = [
 ];
 
 const sidebarNavItems = [
-  { icon: 'home', label: 'Home', href: '/app', active: true },
-  { icon: 'inbox', label: 'Subscriptions', href: '/app/subscriptions', active: false },
-  { icon: 'chat', label: 'Chat', href: '/app/chat', active: false },
-  { icon: 'notifications', label: 'Activity', href: '/app/activity', active: false },
-  { icon: 'explore', label: 'Explore', href: '/app/explore', active: false },
-  { icon: 'dashboard', label: 'Dashboard', href: '/app/dashboard', active: false },
-  { icon: 'person', label: 'Profile', href: '/app/profile', active: false },
+  { Icon: Home,            label: 'Home',          href: '/app',              active: true  },
+  { Icon: Inbox,           label: 'Subscriptions', href: '/app/subscriptions',active: false },
+  { Icon: MessageSquare,   label: 'Chat',          href: '/app/chat',         active: false },
+  { Icon: Bell,            label: 'Activity',      href: '/app/activity',     active: false },
+  { Icon: Compass,         label: 'Explore',       href: '/app/explore',      active: false },
+  { Icon: LayoutDashboard, label: 'Dashboard',     href: '/app/dashboard',    active: false },
+  { Icon: User,            label: 'Profile',       href: '/app/profile',      active: false },
 ];
 
 function PostSkeleton() {
@@ -56,15 +77,13 @@ export default function HomeFeed() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-4 px-4 py-2 rounded-lg font-sans text-[16px] transition-colors ${
+              className={`flex items-center gap-3 px-4 py-2 rounded-lg font-sans text-[16px] transition-colors ${
                 item.active
                   ? 'bg-surface-container text-on-surface font-medium'
                   : 'hover:bg-surface-container text-on-surface-variant'
               }`}
             >
-              <span className="material-symbols-outlined" style={item.active ? { fontVariationSettings: "'FILL' 1" } : undefined}>
-                {item.icon}
-              </span>
+              <item.Icon size={20} strokeWidth={item.active ? 2.5 : 1.75} />
               {item.label}
             </Link>
           ))}
@@ -78,7 +97,7 @@ export default function HomeFeed() {
       </aside>
 
       {/* Center Feed */}
-      <main className="flex-1 max-w-[600px] mx-auto w-full flex flex-col gap-4">
+      <main className="flex-1 min-w-0 max-w-[600px] w-full flex flex-col gap-4">
 
         {error && (
           <div className="flex items-center gap-3 p-5 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm">
@@ -104,7 +123,7 @@ export default function HomeFeed() {
         {!loading && posts.map((post) => (
           <Link key={post.originalTxId} href={`/app/article/${post.originalTxId}`}>
             <article className="bg-parchment rounded-[32px] p-8 border border-stone-200 shadow-sm flex flex-col gap-4 cursor-pointer hover:shadow-md transition-shadow">
-              {/* Header */}
+              {/* Header: author + timestamp */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-surface-dim flex items-center justify-center text-on-surface font-sans text-sm">
@@ -114,6 +133,11 @@ export default function HomeFeed() {
                     {post.authorShort}…
                   </span>
                 </div>
+                {post.timestamp && (
+                  <span className="font-sans text-xs text-stone-400">
+                    {formatTimestamp(post.timestamp)}
+                  </span>
+                )}
               </div>
 
               {/* Title */}
@@ -128,14 +152,36 @@ export default function HomeFeed() {
                 </p>
               )}
 
-              {/* Footer: reward */}
-              <div className="flex items-center gap-8 mt-2 pt-3 border-t border-stone-200">
+              {/* Footer: reading time + tags + bookmark */}
+              <div className="flex items-center gap-3 mt-2 pt-3 border-t border-stone-200">
+                <div className="flex items-center gap-1.5 text-stone-400">
+                  <Clock size={13} />
+                  <span className="font-sans text-xs">{post.readingTime} min read</span>
+                </div>
+
+                {post.tagKeys.length > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="w-1 h-1 bg-stone-300 rounded-full" />
+                    {post.tagKeys.slice(0, 3).map((key) => (
+                      <span
+                        key={key}
+                        className={`${TAG_KEY_COLORS[key] ?? FALLBACK_TAG_COLOR} text-[11px] font-mono px-2 py-0.5 rounded-full`}
+                      >
+                        {key}
+                      </span>
+                    ))}
+                    {post.tagKeys.length > 3 && (
+                      <span className="text-[11px] text-stone-400">+{post.tagKeys.length - 3}</span>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex-1" />
                 <button
                   className="text-on-surface-variant hover:text-on-surface transition-colors"
                   onClick={(e) => e.preventDefault()}
                 >
-                  <span className="material-symbols-outlined">bookmark_border</span>
+                  <Bookmark size={18} strokeWidth={1.5} />
                 </button>
               </div>
             </article>
@@ -147,9 +193,7 @@ export default function HomeFeed() {
       <aside className="hidden xl:flex w-72 flex-col gap-12 sticky top-[100px]">
         {/* Search */}
         <div className="relative">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">
-            search
-          </span>
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none" />
           <input
             className="w-full bg-surface-container-low border border-stone-200 rounded-full py-2 pl-10 pr-4 font-sans text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-pale-lavender focus:border-transparent transition-all"
             placeholder="Search verified translations..."

@@ -87,7 +87,7 @@ export function useArticle(assetId: string) {
 
         // Fall back to first heading in the .mdh if DAS gave no title
         if (!title) {
-          title = extractTitleFromMdh(rawContent, parsedMdh) || 'Untitled';
+          title = extractTitleFromMdh(rawContent, parsedMdh) || `${arweaveTxId.slice(0, 12)}…`;
         }
 
         if (!cancelled) setData({ title, author, arweaveTxId, parsedMdh });

@@ -1,5 +1,6 @@
 import Reader from '../../../pages/Reader';
 
-export default function ArticlePage({ params }: { params: { id: string } }) {
-  return <Reader assetId={params.id} />;
+export default async function ArticlePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <Reader assetId={id} />;
 }

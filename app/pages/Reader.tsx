@@ -1,23 +1,46 @@
 'use client';
 
-import { BadgeCheck, DollarSign, AlertCircle } from 'lucide-react';
+import { BadgeCheck, DollarSign, AlertCircle, Clock, Tag } from 'lucide-react';
 import { useArticle } from '@/hooks/useArticle';
 import { parseMdhBlocks, type ParagraphBlock } from '@/lib/mdh-block-parser';
+import { stripTags } from '@/lib/mdh-utils';
+import type { SemanticTag } from '@/lib/mdh-utils';
 
-// Mirrors the color map in MdhRenderer
-const KEY_COLORS: Record<string, string> = {
-  tone:    'bg-amber-200/70',
-  culture: 'bg-teal-200/70',
-  intent:  'bg-purple-200/70',
-  idiom:   'bg-orange-200/70',
+const KEY_COLORS: Record<string, { bg: string; text: string; label: string }> = {
+  tone:    { bg: 'bg-amber-200/70',  text: 'text-amber-900',  label: 'Tone' },
+  culture: { bg: 'bg-teal-200/70',   text: 'text-teal-900',   label: 'Cultural ref' },
+  intent:  { bg: 'bg-purple-200/70', text: 'text-purple-900', label: 'Intent' },
+  idiom:   { bg: 'bg-orange-200/70', text: 'text-orange-900', label: 'Idiom' },
 };
-const FALLBACK_COLOR = 'bg-stone-200/70';
+const FALLBACK = { bg: 'bg-stone-200/70', text: 'text-stone-700', label: 'Annotation' };
 
-const HEADING_CLASS: Record<number, string> = {
-  1: 'text-5xl text-ink font-serif py-8',
-  2: 'text-4xl text-ink font-serif py-8',
-  3: 'text-3xl text-ink font-serif py-6',
-};
+function readingTime(rawContent: string): number {
+  const words = stripTags(rawContent).split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.ceil(words / 200));
+}
+
+function TagLegend({ tags }: { tags: SemanticTag[] }) {
+  const uniqueKeys = [...new Set(tags.map((t) => t.key))];
+  if (uniqueKeys.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 py-4 px-5 bg-white/60 border border-stone-200 rounded-2xl text-sm">
+      <div className="flex items-center gap-1.5 text-stone-400 shrink-0">
+        <Tag size={13} />
+        <span className="text-xs font-medium uppercase tracking-widest">Semantic annotations</span>
+      </div>
+      {uniqueKeys.map((key) => {
+        const style = KEY_COLORS[key] ?? FALLBACK;
+        return (
+          <span key={key} className={`${style.bg} ${style.text} text-xs font-mono px-2.5 py-1 rounded-full`}>
+            {style.label}
+          </span>
+        );
+      })}
+      <span className="text-xs text-stone-400 ml-auto shrink-0">{tags.length} annotation{tags.length !== 1 ? 's' : ''}</span>
+    </div>
+  );
+}
 
 function renderParagraphInline(block: ParagraphBlock): React.ReactNode[] {
   const { rawText, tags, startOffset } = block;
@@ -32,11 +55,11 @@ function renderParagraphInline(block: ParagraphBlock): React.ReactNode[] {
       nodes.push(<span key={`t-${pos}`}>{rawText.slice(pos, relStart)}</span>);
     }
 
-    const color = KEY_COLORS[tag.key] ?? FALLBACK_COLOR;
+    const style = KEY_COLORS[tag.key] ?? FALLBACK;
     nodes.push(
       <span
         key={`h-${tag.startIndex}`}
-        className={`${color} rounded px-0.5 cursor-help`}
+        className={`${style.bg} ${style.text} rounded px-0.5 cursor-help`}
         title={`${tag.key}: ${tag.value}`}
       >
         {tag.phrase}
@@ -56,49 +79,69 @@ function renderParagraphInline(block: ParagraphBlock): React.ReactNode[] {
 export default function Reader({ assetId }: { assetId: string }) {
   const { data, loading, error } = useArticle(assetId);
 
-  return (
-    <div className="bg-parchment min-h-screen pt-40 pb-24 px-8">
-      <article className="max-w-3xl mx-auto space-y-12">
+  const mins = data ? readingTime(data.parsedMdh.rawContent) : null;
+  const blocks = data ? parseMdhBlocks(data.parsedMdh.rawContent, data.parsedMdh.tags) : [];
 
-        <header className="text-center space-y-8">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-stone-200 rounded-full shadow-sm">
-            <BadgeCheck size={18} className="text-forest-canopy" />
-            <span className="text-[10px] uppercase font-bold tracking-[0.2em] text-ink">
-              Verified by Interpretooor
-            </span>
+  return (
+    <div className="bg-parchment min-h-screen pt-32 pb-24 px-6">
+      <article className="max-w-2xl mx-auto">
+
+        {/* Header */}
+        <header className="mb-12 space-y-6">
+          <div className="flex justify-center">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white border border-stone-200 rounded-full shadow-sm">
+              <BadgeCheck size={15} className="text-forest-canopy" />
+              <span className="text-[10px] uppercase font-bold tracking-[0.2em] text-ink">
+                Verified by Interpretooor
+              </span>
+            </div>
           </div>
 
           {loading ? (
-            <div className="space-y-4 animate-pulse">
+            <div className="space-y-4 animate-pulse text-center">
               <div className="h-14 bg-stone-200 rounded-2xl w-3/4 mx-auto" />
-              <div className="h-14 bg-stone-100 rounded-2xl w-1/2 mx-auto" />
+              <div className="h-10 bg-stone-100 rounded-2xl w-1/2 mx-auto" />
             </div>
           ) : (
-            <h1 className="text-7xl font-serif leading-[0.8] tracking-tighter">
+            <h1 className="text-6xl font-serif leading-[1.05] tracking-tighter text-center text-ink">
               {data?.title ?? 'Untitled'}
             </h1>
           )}
 
-          <div className="h-0.5 w-16 bg-pale-lavender mx-auto" />
-
           {!loading && data && (
-            <div className="flex items-center justify-center gap-4 text-sm text-stone-400 font-medium">
-              <span>By {data.author.slice(0, 8)}…</span>
-              <span className="w-1 h-1 bg-stone-300 rounded-full" />
-              <span className="font-mono text-xs">{data.arweaveTxId.slice(0, 10)}…</span>
-            </div>
+            <>
+              <div className="flex items-center justify-center gap-3 text-sm text-stone-400">
+                <div className="w-7 h-7 rounded-full bg-surface-dim flex items-center justify-center text-on-surface text-xs font-medium">
+                  {data.author ? data.author.slice(0, 1).toUpperCase() : '?'}
+                </div>
+                <span className="font-mono">{data.author ? `${data.author.slice(0, 8)}…` : 'Unknown author'}</span>
+                <span className="w-1 h-1 bg-stone-300 rounded-full" />
+                {mins !== null && (
+                  <>
+                    <Clock size={13} />
+                    <span>{mins} min read</span>
+                    <span className="w-1 h-1 bg-stone-300 rounded-full" />
+                  </>
+                )}
+                <span className="font-mono text-xs">{data.arweaveTxId.slice(0, 10)}…</span>
+              </div>
+
+              <div className="h-px bg-stone-200 w-full" />
+
+              <TagLegend tags={data.parsedMdh.tags} />
+            </>
           )}
         </header>
 
         {error && (
-          <div className="flex items-center gap-3 p-6 bg-red-50 border border-red-200 rounded-2xl text-red-700">
+          <div className="flex items-center gap-3 p-6 bg-red-50 border border-red-200 rounded-2xl text-red-700 mb-12">
             <AlertCircle size={20} />
             <span className="text-sm">{error}</span>
           </div>
         )}
 
         {loading && (
-          <section className="space-y-8 animate-pulse">
+          <div className="space-y-6 animate-pulse">
             {[0, 1, 2].map((i) => (
               <div key={i} className="space-y-3">
                 <div className="h-5 bg-stone-200 rounded w-full" />
@@ -106,44 +149,87 @@ export default function Reader({ assetId }: { assetId: string }) {
                 <div className="h-5 bg-stone-100 rounded w-4/6" />
               </div>
             ))}
-          </section>
+          </div>
         )}
 
+        {/* Article body */}
         {!loading && data && (
-          <section className="space-y-8 font-sans text-xl leading-relaxed text-charcoal-text font-light tracking-tight">
-            {parseMdhBlocks(data.parsedMdh.rawContent, data.parsedMdh.tags).map((block, i) => {
+          <div className="prose-article">
+            {blocks.map((block, i) => {
               if (block.type === 'heading') {
-                const Tag = `h${block.level}` as 'h1' | 'h2' | 'h3';
-                return <Tag key={i} className={HEADING_CLASS[block.level]}>{block.text}</Tag>;
+                if (block.level === 1) {
+                  return (
+                    <h2 key={i} className="text-4xl font-serif text-ink mt-12 mb-4 leading-tight tracking-tight">
+                      {block.text}
+                    </h2>
+                  );
+                }
+                if (block.level === 2) {
+                  return (
+                    <h3 key={i} className="text-2xl font-serif text-ink mt-10 mb-3 leading-snug">
+                      {block.text}
+                    </h3>
+                  );
+                }
+                return (
+                  <h4 key={i} className="text-xl font-sans font-semibold text-ink mt-8 mb-2">
+                    {block.text}
+                  </h4>
+                );
               }
-              // TODO: image hosting — strip markdown image syntax until a hosting solution is in place
+
               const strippedRaw = block.rawText.replace(/!\[.*?\]\(.*?\)/g, '').trim();
               if (!strippedRaw) return null;
               const strippedBlock = { ...block, rawText: strippedRaw };
+
+              const isFirst = i === blocks.findIndex((b) => b.type === 'paragraph');
+
               return (
-                <p key={i}>
+                <p
+                  key={i}
+                  className={`font-sans text-[18px] leading-[1.8] text-charcoal-text font-light tracking-tight mb-6 ${
+                    isFirst ? 'text-[20px] leading-[1.75] text-ink/90' : ''
+                  }`}
+                >
                   {strippedBlock.tags.length > 0 ? renderParagraphInline(strippedBlock) : strippedRaw}
                 </p>
               );
             })}
-          </section>
+          </div>
         )}
 
-        <section className="mt-24 p-12 bg-white rounded-[40px] border border-stone-200 text-center space-y-6 shadow-sm">
-          <h3 className="text-3xl text-ink">Tip the Writer</h3>
-          <p className="text-stone-500 max-w-md mx-auto text-lg leading-relaxed">
-            Support the original author and the translation protocol to ensure the continued flow of high-quality editorial content.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-            <button className="px-10 py-4 bg-pale-lavender text-ink rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
-              <DollarSign size={18} />
-              Tip 1 USDC
-            </button>
-            <button className="px-10 py-4 border border-ink text-ink rounded-lg font-medium hover:bg-stone-50 transition-colors">
-              Tip 5 USDC
-            </button>
-          </div>
-        </section>
+        {/* Footer */}
+        {!loading && data && (
+          <footer className="mt-16 pt-8 border-t border-stone-200 space-y-10">
+
+            {data.parsedMdh.tags.length > 0 && (
+              <div className="text-center text-sm text-stone-400 space-y-1">
+                <p>
+                  This article contains{' '}
+                  <span className="font-medium text-stone-600">{data.parsedMdh.tags.length} semantic annotation{data.parsedMdh.tags.length !== 1 ? 's' : ''}</span>{' '}
+                  to guide AI translation.
+                </p>
+                <p className="text-xs">Highlighted phrases carry intent, tone, or cultural context that a translator should preserve.</p>
+              </div>
+            )}
+
+            <div className="p-10 bg-white rounded-[32px] border border-stone-200 text-center space-y-5 shadow-sm">
+              <h3 className="text-3xl text-ink font-serif">Tip the Writer</h3>
+              <p className="text-stone-500 max-w-sm mx-auto text-base leading-relaxed">
+                Support the original author and the translation protocol.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+                <button className="px-8 py-3.5 bg-pale-lavender text-ink rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
+                  <DollarSign size={16} />
+                  Tip 1 USDC
+                </button>
+                <button className="px-8 py-3.5 border border-ink text-ink rounded-lg font-medium hover:bg-stone-50 transition-colors">
+                  Tip 5 USDC
+                </button>
+              </div>
+            </div>
+          </footer>
+        )}
 
       </article>
     </div>
