@@ -102,7 +102,7 @@ export default function HomeFeed() {
         )}
 
         {!loading && posts.map((post) => (
-          <Link key={post.originalTxId} href={`/app/article/${post.originalTxId}`}>
+          <Link key={post.bountyId} href={`/app/article/${post.originalTxId}`}>
             <article className="bg-parchment rounded-[32px] p-8 border border-stone-200 shadow-sm flex flex-col gap-4 cursor-pointer hover:shadow-md transition-shadow">
               {/* Header */}
               <div className="flex items-center justify-between">

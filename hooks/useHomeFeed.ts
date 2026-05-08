@@ -7,6 +7,7 @@ import { parseMdhBlocks } from '@/lib/mdh-block-parser';
 import { stripTags } from '@/lib/mdh-utils';
 
 export interface HomeFeedPost {
+  bountyId: string;
   originalTxId: string;
   targetLanguage: string;
   rewardUsdc: number;
@@ -43,9 +44,9 @@ export function useHomeFeed() {
     setError(null);
     try {
       const all = await fetchAllBounties();
-      const readable = all.filter(
-        (b: BountyAccount) => 'paid' in b.status || 'pendingReview' in b.status
-      );
+      // Previously filtered for 'paid' or 'pendingReview', which hid new articles.
+      // Now we show all valid bounties on the home feed.
+      const readable = all;
 
       const gateway =
         process.env.NEXT_PUBLIC_IRYS_GATEWAY ?? 'https://devnet.irys.xyz';
@@ -64,6 +65,7 @@ export function useHomeFeed() {
           }
 
           return {
+            bountyId: b.publicKey.toBase58(),
             originalTxId: b.originalTxId,
             targetLanguage: b.targetLanguage,
             rewardUsdc: b.rewardAmount.toNumber() / 1_000_000,
