@@ -42,7 +42,28 @@ function TagLegend({ tags }: { tags: SemanticTag[] }) {
   );
 }
 
-function renderParagraphInline(block: ParagraphBlock): React.ReactNode[] {
+function cap(s: string) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function SemanticHighlight({ tag }: { tag: SemanticTag }) {
+  const style = KEY_COLORS[tag.key] ?? FALLBACK;
+  const label = `${cap(style.label)}: ${cap(tag.value)}`;
+
+  return (
+    <span className="relative inline group/tag">
+      <span className={`${style.bg} ${style.text} rounded px-0.5 cursor-help`}>
+        {tag.phrase}
+      </span>
+      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 whitespace-nowrap rounded-lg bg-ink px-2.5 py-1 text-xs font-medium text-white opacity-0 shadow-md transition-opacity duration-150 group-hover/tag:opacity-100 z-50">
+        {label}
+        <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-ink" />
+      </span>
+    </span>
+  );
+}
+
+function renderInlineContent(block: { rawText: string; tags: SemanticTag[]; startOffset: number }): React.ReactNode[] {
   const { rawText, tags, startOffset } = block;
   const nodes: React.ReactNode[] = [];
   let pos = 0;
@@ -55,16 +76,7 @@ function renderParagraphInline(block: ParagraphBlock): React.ReactNode[] {
       nodes.push(<span key={`t-${pos}`}>{rawText.slice(pos, relStart)}</span>);
     }
 
-    const style = KEY_COLORS[tag.key] ?? FALLBACK;
-    nodes.push(
-      <span
-        key={`h-${tag.startIndex}`}
-        className={`${style.bg} ${style.text} rounded px-0.5 cursor-help`}
-        title={`${tag.key}: ${tag.value}`}
-      >
-        {tag.phrase}
-      </span>
-    );
+    nodes.push(<SemanticHighlight key={`h-${tag.startIndex}`} tag={tag} />);
 
     pos = relEnd;
   }
@@ -178,6 +190,22 @@ export default function Reader({ assetId }: { assetId: string }) {
                 );
               }
 
+              if (block.type === 'list') {
+                const ListTag = block.ordered ? 'ol' : 'ul';
+                return (
+                  <ListTag
+                    key={i}
+                    className={`ml-6 mb-6 space-y-3 ${block.ordered ? 'list-decimal' : 'list-disc'}`}
+                  >
+                    {block.items.map((item, j) => (
+                      <li key={j} className="font-sans text-[18px] leading-[1.8] text-charcoal-text font-light tracking-tight">
+                        {item.tags.length > 0 ? renderInlineContent(item) : item.rawText}
+                      </li>
+                    ))}
+                  </ListTag>
+                );
+              }
+
               const strippedRaw = block.rawText.replace(/!\[.*?\]\(.*?\)/g, '').trim();
               if (!strippedRaw) return null;
               const strippedBlock = { ...block, rawText: strippedRaw };
@@ -191,12 +219,13 @@ export default function Reader({ assetId }: { assetId: string }) {
                     isFirst ? 'text-[20px] leading-[1.75] text-ink/90' : ''
                   }`}
                 >
-                  {strippedBlock.tags.length > 0 ? renderParagraphInline(strippedBlock) : strippedRaw}
+                  {strippedBlock.tags.length > 0 ? renderInlineContent(strippedBlock) : strippedRaw}
                 </p>
               );
             })}
           </div>
         )}
+
 
         {/* Footer */}
         {!loading && data && (

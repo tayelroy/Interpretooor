@@ -46,6 +46,7 @@ export type BountyStatus =
   | { open: Record<string, never> }
   | { claimed: Record<string, never> }
   | { pendingReview: Record<string, never> }
+  | { awaitingValidation: Record<string, never> }
   | { disputed: Record<string, never> }
   | { paid: Record<string, never> };
 
@@ -97,6 +98,13 @@ export function deriveVaultPda(bountyAccount: PublicKey): [PublicKey, number] {
   );
 }
 
+export function deriveValidationPda(bountyAccount: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from('validation'), bountyAccount.toBuffer()],
+    BOUNTY_PROGRAM_ID
+  );
+}
+
 // ─── Validation ──────────────────────────────────────────────────────────────
 
 function isValidBountyAccount(b: BountyAccount): boolean {
@@ -112,6 +120,7 @@ function isValidBountyAccount(b: BountyAccount): boolean {
       'open' in b.status ||
       'claimed' in b.status ||
       'pendingReview' in b.status ||
+      'awaitingValidation' in b.status ||
       'disputed' in b.status ||
       'paid' in b.status
     )
@@ -357,11 +366,15 @@ export function useBounty() {
 
       const translatedTxId = await sponsorUpload(translationData as string);
 
+      const [validationRecord] = deriveValidationPda(bountyPda);
+
       const sig = await program.methods
         .submitTranslation(translatedTxId)
         .accounts({
           translator: provider.wallet.publicKey,
           bountyAccount: bountyPda,
+          validationRecord,
+          systemProgram: anchor.web3.SystemProgram.programId,
         })
         .rpc();
 
@@ -518,7 +531,7 @@ export function useBounty() {
   /** Fetch all BountyAccounts, optionally filtered by status */
   const fetchAllBounties = useCallback(
     async (
-      statusFilter?: 'open' | 'claimed' | 'pendingReview' | 'disputed' | 'paid'
+      statusFilter?: 'open' | 'claimed' | 'pendingReview' | 'awaitingValidation' | 'disputed' | 'paid'
     ): Promise<BountyAccount[]> => {
       const provider = buildProvider();
       const program = buildProgram(provider);
@@ -567,5 +580,6 @@ export function useBounty() {
     isDisputeWindowOpen,
     deriveBountyPda,
     deriveVaultPda,
+    deriveValidationPda,
   };
 }

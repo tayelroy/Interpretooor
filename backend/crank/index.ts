@@ -77,13 +77,8 @@ function vaultPda(bountyAccount: PublicKey): [PublicKey, number] {
 
 // ─── Status enum (must mirror BountyStatus in lib.rs) ────────────────────────
 
-enum BountyStatus {
-  Open = 0,
-  Claimed = 1,
-  PendingReview = 2,
-  Disputed = 3,
-  Paid = 4,
-}
+// 7 days — stale AwaitingValidation safety threshold
+const VALIDATION_STALE_SECS = 7 * 24 * 60 * 60;
 
 interface BountyAccountData {
   author: PublicKey;
@@ -93,7 +88,14 @@ interface BountyAccountData {
   originalTxId: string;
   translatedTxId: string | null;
   submissionTimestamp: anchor.BN;
-  status: { open?: object; claimed?: object; pendingReview?: object; disputed?: object; paid?: object };
+  status: {
+    open?: object;
+    claimed?: object;
+    pendingReview?: object;
+    awaitingValidation?: object;
+    disputed?: object;
+    paid?: object;
+  };
   nonce: anchor.BN;
   bump: number;
   vaultBump: number;
@@ -171,6 +173,26 @@ async function runCrank(): Promise<void> {
         `[crank] ✗ Failed to execute payout for ${bountyPubkey.toBase58()}: ${message}`
       );
     }
+  }
+
+  // ── Safety-valve sweep: stale AwaitingValidation bounties ──────────────────
+  // These are bounties where no validators showed up within 7 days.
+  // We log a warning so the platform team can manually intervene or cancel.
+  const staleValidation = allBounties.filter((b: { publicKey: PublicKey; account: BountyAccountData }) => {
+    const data = b.account as unknown as BountyAccountData;
+    const isAwaiting = 'awaitingValidation' in data.status;
+    const submissionTs = data.submissionTimestamp.toNumber();
+    return isAwaiting && nowSecs > submissionTs + VALIDATION_STALE_SECS;
+  });
+
+  if (staleValidation.length > 0) {
+    console.warn(
+      `[crank] ⚠ ${staleValidation.length} bounties have been AwaitingValidation for >7 days:`
+    );
+    for (const b of staleValidation) {
+      console.warn(`[crank]   ${b.publicKey.toBase58()}`);
+    }
+    console.warn('[crank]   Manual intervention may be required (cancel or re-list).');
   }
 
   console.log('[crank] Sweep complete');

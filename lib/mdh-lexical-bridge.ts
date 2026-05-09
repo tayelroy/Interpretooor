@@ -2,8 +2,29 @@
 import type { LexicalEditor, LexicalNode } from 'lexical';
 import { $createParagraphNode, $createTextNode, $getRoot } from 'lexical';
 import { $isHeadingNode } from '@lexical/rich-text';
+import { $isListNode, $isListItemNode } from '@lexical/list';
 import { $createSemanticNode, $isSemanticNode } from '@/app/components/editor/SemanticNode';
 import { parseMdh } from '@/lib/mdh-utils';
+
+function getBlockText(block: LexicalNode): string {
+  const inlines = 'getChildren' in block
+    ? (block as { getChildren: () => LexicalNode[] }).getChildren()
+    : [];
+
+  let blockText = '';
+  for (const node of inlines) {
+    if ($isSemanticNode(node)) {
+      const tag = node.getSemanticTag();
+      // Fall back to tag name when note is empty so the output satisfies the
+      // parseMdh regex which requires a non-empty value segment.
+      const note = node.getSemanticNote() || tag;
+      blockText += `<${tag}=${note}> ${node.getTextContent()} </${tag}>`;
+    } else {
+      blockText += node.getTextContent();
+    }
+  }
+  return blockText;
+}
 
 /**
  * Walk the Lexical editor state and produce a raw .mdh string suitable for
@@ -16,23 +37,23 @@ export function serialiseLexicalToMdh(editor: LexicalEditor): string {
     const blocks = $getRoot().getChildren();
 
     for (const block of blocks) {
-      const inlines = 'getChildren' in block
-        ? (block as { getChildren: () => LexicalNode[] }).getChildren()
-        : [];
-
-      let blockText = '';
-      for (const node of inlines) {
-        if ($isSemanticNode(node)) {
-          const tag = node.getSemanticTag();
-          // Fall back to tag name when note is empty so the output satisfies the
-          // parseMdh regex which requires a non-empty value segment.
-          const note = node.getSemanticNote() || tag;
-          blockText += `<${tag}=${note}> ${node.getTextContent()} </${tag}>`;
-        } else {
-          blockText += node.getTextContent();
+      if ($isListNode(block)) {
+        const tag = block.getTag(); // 'ul' or 'ol'
+        const items = block.getChildren();
+        for (const item of items) {
+          if ($isListItemNode(item)) {
+            const itemText = getBlockText(item);
+            if (itemText.trim()) {
+              const prefix = tag === 'ol' ? '1.' : '*';
+              output += `${prefix} ${itemText}\n`;
+            }
+          }
         }
+        output += '\n';
+        continue;
       }
 
+      const blockText = getBlockText(block);
       if (!blockText.trim()) continue;
 
       if ($isHeadingNode(block)) {

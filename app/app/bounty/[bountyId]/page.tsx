@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useWallets } from '@privy-io/react-auth/solana';
 import { PublicKey } from '@solana/web3.js';
-import { ArrowLeft, Download, CheckCircle, Loader2, AlertCircle, Globe, XCircle } from 'lucide-react';
+import { ArrowLeft, Download, CheckCircle, Loader2, AlertCircle, Globe, XCircle, PenLine, ShieldCheck } from 'lucide-react';
 import { useBounty, type BountyAccount } from '@/hooks/useBounty';
 import { parseMdh, exportToMdh, type ParsedMdh } from '@/lib/mdh-utils';
 import MdhRenderer from '@/app/components/MdhRenderer';
@@ -20,6 +20,7 @@ function statusLabel(status: BountyAccount['status']): string {
   if ('open' in status) return 'Open';
   if ('claimed' in status) return 'Claimed';
   if ('pendingReview' in status) return 'Pending Review';
+  if ('awaitingValidation' in status) return 'Awaiting Validation';
   if ('disputed' in status) return 'Disputed';
   if ('paid' in status) return 'Paid';
   return 'Unknown';
@@ -137,8 +138,11 @@ export default function BountyDetailPage() {
   }
 
   const isAuthor = activeAddress === bounty.author.toBase58();
+  const isTranslator = !!bounty.translator && activeAddress === bounty.translator.toBase58();
   const isOpen = 'open' in bounty.status;
+  const isClaimed = 'claimed' in bounty.status;
   const isPendingReview = 'pendingReview' in bounty.status;
+  const isAwaitingValidation = 'awaitingValidation' in bounty.status;
 
   return (
     <div className="min-h-screen bg-parchment pt-40 pb-20 px-8">
@@ -240,15 +244,47 @@ export default function BountyDetailPage() {
           </div>
         )}
 
-        {!isOpen && !isPendingReview && 'claimed' in bounty.status && (
-          <div className="text-center py-4">
-            <span className="inline-block px-6 py-3 bg-stone-100 text-stone-500 rounded-2xl text-sm font-medium">
-              Job Taken — This bounty has been claimed
-            </span>
+        {/* Claimed: translator sees "Continue to Workspace", others see "Job Taken" */}
+        {isClaimed && (
+          isTranslator ? (
+            <div className="flex justify-end">
+              <button
+                onClick={() => router.push(`/app/workspace/${bountyId}`)}
+                className="flex items-center gap-2 px-8 py-4 bg-ink text-parchment rounded-2xl font-bold text-base hover:opacity-90 transition-opacity"
+              >
+                <PenLine size={18} />
+                Continue to Workspace
+              </button>
+            </div>
+          ) : (
+            <div className="text-center py-4">
+              <span className="inline-block px-6 py-3 bg-stone-100 text-stone-500 rounded-2xl text-sm font-medium">
+                Job Taken — This bounty has been claimed
+              </span>
+            </div>
+          )
+        )}
+
+        {/* Awaiting validation: show link to validate */}
+        {isAwaitingValidation && (
+          <div className="flex items-center justify-between p-5 bg-violet-50 border border-violet-200 rounded-2xl">
+            <div>
+              <p className="text-sm font-semibold text-violet-800">Translation submitted — awaiting validator review</p>
+              <p className="text-xs text-violet-500 mt-0.5">Two validators must attest quality before the bounty is released.</p>
+            </div>
+            {!isAuthor && !isTranslator && (
+              <button
+                onClick={() => router.push(`/app/validate/${bountyId}`)}
+                className="flex items-center gap-2 px-5 py-2.5 bg-violet-700 text-white rounded-xl text-sm font-semibold hover:bg-violet-800 transition-colors shrink-0 ml-4"
+              >
+                <ShieldCheck size={14} />
+                Validate
+              </button>
+            )}
           </div>
         )}
 
-        {/* Pending review: show translated content */}
+        {/* Pending review: show translated content (legacy flow) */}
         {isPendingReview && <PendingReviewPanel bounty={bounty} bountyId={bountyId} isAuthor={isAuthor} onRefresh={load} />}
 
       </div>
