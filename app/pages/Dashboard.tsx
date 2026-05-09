@@ -147,7 +147,7 @@ export default function Dashboard({ onJobSelect, containerClassName }: Dashboard
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.07 }}
-              onClick={() => router.push(`/app/article/${bounty.originalTxId}`)}
+              onClick={() => onJobSelect(bounty.publicKey)}
               className="bg-white rounded-[32px] p-8 border border-stone-200/60 shadow-sm hover:shadow-md transition-all group flex flex-col h-full cursor-pointer"
             >
               {/* Header row */}

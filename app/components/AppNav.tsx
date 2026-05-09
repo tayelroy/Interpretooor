@@ -9,6 +9,7 @@ import ConnectWalletButton from './ConnectWalletButton';
 const navItems = [
   { label: 'Home', href: '/app' },
   { label: 'Translate', href: '/app/translate' },
+  { label: 'Validate', href: '/app/validate' },
   { label: 'Write', href: '/app/write' },
 ];
 
