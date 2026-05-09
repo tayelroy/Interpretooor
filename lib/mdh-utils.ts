@@ -12,7 +12,7 @@ export interface ParsedMdh {
   rawContent: string;   // Original unmodified input string
 }
 
-const TAG_REGEX = /<([a-z][a-z0-9-]*)=([a-z0-9][a-z0-9-]*?)>\s*([\s\S]*?)\s*<\/\1>/g;
+const TAG_REGEX = /<([a-z][a-z0-9-]*)=([^>]+?)>\s*([\s\S]*?)\s*<\/\1>/g;
 
 export function parseMdh(rawContent: string): ParsedMdh {
   if (typeof rawContent !== 'string') {

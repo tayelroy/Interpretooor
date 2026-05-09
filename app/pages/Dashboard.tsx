@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import { ArrowRight, BadgeCheck, Languages, Clock, AlertCircle, Loader2, Globe } from 'lucide-react';
 import { PublicKey } from '@solana/web3.js';
@@ -12,6 +13,7 @@ function statusLabel(status: BountyAccount['status']): string {
   if ('open' in status) return 'Open';
   if ('claimed' in status) return 'Claimed';
   if ('pendingReview' in status) return 'Pending Review';
+  if ('awaitingValidation' in status) return 'Awaiting Validation';
   if ('disputed' in status) return 'Disputed';
   if ('paid' in status) return 'Paid';
   return 'Unknown';
@@ -21,6 +23,7 @@ function statusColor(status: BountyAccount['status']): string {
   if ('open' in status) return 'bg-emerald-100 text-emerald-800 border-emerald-200';
   if ('claimed' in status) return 'bg-blue-100 text-blue-800 border-blue-200';
   if ('pendingReview' in status) return 'bg-amber-100 text-amber-800 border-amber-200';
+  if ('awaitingValidation' in status) return 'bg-violet-100 text-violet-800 border-violet-200';
   if ('disputed' in status) return 'bg-red-100 text-red-800 border-red-200';
   if ('paid' in status) return 'bg-stone-100 text-stone-500 border-stone-200';
   return '';
@@ -46,23 +49,42 @@ interface DashboardProps {
   containerClassName?: string;
 }
 
+async function fetchArticleTitle(txId: string): Promise<string> {
+  const gateway = process.env.NEXT_PUBLIC_IRYS_GATEWAY ?? 'https://devnet.irys.xyz';
+  try {
+    const res = await fetch(`${gateway}/${txId}`, { headers: { Range: 'bytes=0-150' } });
+    const text = await res.text();
+    const match = text.match(/^#\s+(.+)/m);
+    return match ? match[1].trim() : '';
+  } catch {
+    return '';
+  }
+}
+
 export default function Dashboard({ onJobSelect, containerClassName }: DashboardProps) {
+  const router = useRouter();
   const { fetchAllBounties, isDisputeWindowOpen } = useBounty();
 
   const [bounties, setBounties] = useState<BountyAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [titles, setTitles] = useState<Record<string, string>>({});
 
   const loadBounties = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      // Show only open + claimed jobs on the public job board
       const all = await fetchAllBounties();
       const active = all.filter(
         (b) => 'open' in b.status || 'claimed' in b.status
       );
       setBounties(active);
+
+      // Fetch titles in parallel after bounties are set
+      const entries = await Promise.all(
+        active.map(async (b) => [b.originalTxId, await fetchArticleTitle(b.originalTxId)] as const)
+      );
+      setTitles(Object.fromEntries(entries));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
@@ -125,7 +147,8 @@ export default function Dashboard({ onJobSelect, containerClassName }: Dashboard
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.07 }}
-              className="bg-white rounded-[32px] p-8 border border-stone-200/60 shadow-sm hover:shadow-md transition-all group flex flex-col h-full"
+              onClick={() => router.push(`/app/article/${bounty.originalTxId}`)}
+              className="bg-white rounded-[32px] p-8 border border-stone-200/60 shadow-sm hover:shadow-md transition-all group flex flex-col h-full cursor-pointer"
             >
               {/* Header row */}
               <div className="flex justify-between items-start mb-6">
@@ -140,8 +163,13 @@ export default function Dashboard({ onJobSelect, containerClassName }: Dashboard
                 </div>
               </div>
 
-              {/* Arweave TX ID preview + language */}
+              {/* Title + language */}
               <div className="flex flex-col gap-2 mb-6 flex-grow">
+                <p className="text-ink font-medium leading-snug line-clamp-2 text-base">
+                  {titles[bounty.originalTxId] ?? (
+                    <span className="inline-block h-4 w-40 rounded bg-stone-100 animate-pulse" />
+                  )}
+                </p>
                 {bounty.targetLanguage && (
                   <div className="flex items-center gap-2 text-xs text-stone-500 font-medium">
                     <Globe size={12} />
@@ -193,7 +221,7 @@ export default function Dashboard({ onJobSelect, containerClassName }: Dashboard
 
                 {'open' in bounty.status && (
                   <button
-                    onClick={() => onJobSelect(bounty.publicKey)}
+                    onClick={(e) => { e.stopPropagation(); onJobSelect(bounty.publicKey); }}
                     className="px-8 py-3 bg-pale-lavender text-ink rounded-xl font-semibold hover:bg-opacity-80 transition-all active:scale-95"
                   >
                     Claim
@@ -202,7 +230,7 @@ export default function Dashboard({ onJobSelect, containerClassName }: Dashboard
 
                 {'claimed' in bounty.status && (
                   <button
-                    onClick={() => onJobSelect(bounty.publicKey)}
+                    onClick={(e) => { e.stopPropagation(); onJobSelect(bounty.publicKey); }}
                     className="px-8 py-3 bg-stone-100 text-stone-600 rounded-xl font-semibold hover:bg-stone-200 transition-all active:scale-95"
                   >
                     View

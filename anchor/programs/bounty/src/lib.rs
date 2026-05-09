@@ -3,10 +3,8 @@ use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer as SplTransfer
 
 declare_id!("EZs9aybYZxSdSL8t1fCD2iXcpYHidsYQa44KttCRZFAs");
 
-/// 48-hour dispute window in seconds
 const REVIEW_WINDOW_SECS: i64 = 48 * 60 * 60;
 
-/// Arweave TX IDs are 43 base64url chars; Irys devnet IDs are 44 chars
 const ARWEAVE_TX_ID_MIN: usize = 43;
 const ARWEAVE_TX_ID_MAX: usize = 44;
 
@@ -14,8 +12,6 @@ const ARWEAVE_TX_ID_MAX: usize = 44;
 pub mod translation_bounty {
     use super::*;
 
-    /// Author creates an escrow vault and deposits USDC reward.
-    /// `nonce` makes each bounty PDA unique per author.
     pub fn initialize_bounty(
         ctx: Context<InitializeBounty>,
         nonce: u64,
@@ -70,7 +66,6 @@ pub mod translation_bounty {
         Ok(())
     }
 
-    /// Translator locks in the job. First come, first served.
     pub fn claim_bounty(ctx: Context<ClaimBounty>) -> Result<()> {
         let bounty = &mut ctx.accounts.bounty_account;
         require!(
@@ -85,7 +80,8 @@ pub mod translation_bounty {
         Ok(())
     }
 
-    /// Translator submits finished work and starts the 48-hour clock.
+    /// Translator submits finished work. Initialises ValidationRecord and sets
+    /// status to AwaitingValidation — two validators must attest before payout.
     pub fn submit_translation(
         ctx: Context<SubmitTranslation>,
         translated_tx_id: String,
@@ -107,18 +103,139 @@ pub mod translation_bounty {
 
         bounty.translated_tx_id = Some(translated_tx_id.clone());
         bounty.submission_timestamp = Clock::get()?.unix_timestamp;
-        bounty.status = BountyStatus::PendingReview;
+        bounty.status = BountyStatus::AwaitingValidation;
+
+        let record = &mut ctx.accounts.validation_record;
+        record.bounty = ctx.accounts.bounty_account.key();
+        record.bump = ctx.bumps.validation_record;
 
         msg!(
-            "Translation submitted. Arweave: {}. Clock starts at: {}",
+            "Translation submitted. Arweave: {}. Awaiting validation.",
             translated_tx_id,
-            bounty.submission_timestamp,
         );
 
         Ok(())
     }
 
-    /// Author raises a dispute within the 48-hour window. Freezes funds until admin resolves.
+    /// First-come first-served validator registration.
+    /// Translators cannot validate their own submission.
+    pub fn register_validator(ctx: Context<RegisterValidator>) -> Result<()> {
+        let bounty = &ctx.accounts.bounty_account;
+        require!(
+            bounty.status == BountyStatus::AwaitingValidation,
+            BountyError::InvalidStatus
+        );
+
+        let validator_key = ctx.accounts.validator.key();
+        require!(
+            bounty.translator != Some(validator_key),
+            BountyError::TranslatorCannotValidate
+        );
+
+        let record = &mut ctx.accounts.validation_record;
+        if record.validator_1.is_none() {
+            record.validator_1 = Some(validator_key);
+            msg!("Validator 1 registered: {}", validator_key);
+        } else if record.validator_2.is_none() {
+            require!(
+                record.validator_1 != Some(validator_key),
+                BountyError::ValidatorSlotsFull
+            );
+            record.validator_2 = Some(validator_key);
+            msg!("Validator 2 registered: {}", validator_key);
+        } else {
+            return err!(BountyError::ValidatorSlotsFull);
+        }
+
+        Ok(())
+    }
+
+    /// Validator submits their Sign Protocol attestation hash and vote.
+    /// On the second vote: approves → auto-pay; reject → Disputed.
+    pub fn submit_validator_attestation(
+        ctx: Context<SubmitValidatorAttestation>,
+        attestation_id_hash: [u8; 32],
+        approve: bool,
+    ) -> Result<()> {
+        require!(
+            ctx.accounts.bounty_account.status == BountyStatus::AwaitingValidation,
+            BountyError::InvalidStatus
+        );
+
+        let validator_key = ctx.accounts.validator.key();
+
+        // Determine which slot this validator occupies and read the other vote
+        let (is_validator_1, existing_other_vote) = {
+            let record = &ctx.accounts.validation_record;
+            let is_v1 = record.validator_1 == Some(validator_key);
+            let is_v2 = record.validator_2 == Some(validator_key);
+            require!(is_v1 || is_v2, BountyError::NotAValidator);
+            if is_v1 {
+                require!(record.attestation_id_1.is_none(), BountyError::AlreadyAttested);
+                (true, record.vote_2)
+            } else {
+                require!(record.attestation_id_2.is_none(), BountyError::AlreadyAttested);
+                (false, record.vote_1)
+            }
+        };
+
+        // Snapshot bounty state before any mutable borrows
+        let nonce_bytes = ctx.accounts.bounty_account.nonce.to_le_bytes();
+        let author_key = ctx.accounts.bounty_account.author;
+        let bump = ctx.accounts.bounty_account.bump;
+        let reward_amount = ctx.accounts.bounty_account.reward_amount;
+
+        // Record this validator's attestation
+        {
+            let record = &mut ctx.accounts.validation_record;
+            if is_validator_1 {
+                record.attestation_id_1 = Some(attestation_id_hash);
+                record.vote_1 = Some(approve);
+            } else {
+                record.attestation_id_2 = Some(attestation_id_hash);
+                record.vote_2 = Some(approve);
+            }
+        }
+
+        // If both have now voted, settle
+        if let Some(other_vote) = existing_other_vote {
+            let consensus = approve && other_vote;
+
+            if consensus {
+                let bounty_seeds: &[&[u8]] = &[
+                    b"bounty",
+                    author_key.as_ref(),
+                    &nonce_bytes,
+                    &[bump],
+                ];
+                let signer_seeds: &[&[&[u8]]] = &[bounty_seeds];
+
+                token::transfer(
+                    CpiContext::new_with_signer(
+                        ctx.accounts.token_program.to_account_info(),
+                        SplTransfer {
+                            from: ctx.accounts.vault.to_account_info(),
+                            to: ctx.accounts.translator_token_account.to_account_info(),
+                            authority: ctx.accounts.bounty_account.to_account_info(),
+                        },
+                        signer_seeds,
+                    ),
+                    reward_amount,
+                )?;
+
+                ctx.accounts.bounty_account.status = BountyStatus::Paid;
+                msg!("Consensus: both approved. Bounty paid. Amount: {}", reward_amount);
+            } else {
+                ctx.accounts.bounty_account.status = BountyStatus::Disputed;
+                msg!("Consensus: rejected. Status set to Disputed.");
+            }
+        } else {
+            msg!("First attestation recorded. Awaiting second validator.");
+        }
+
+        Ok(())
+    }
+
     pub fn dispute_bounty(ctx: Context<DisputeBounty>) -> Result<()> {
         let bounty = &mut ctx.accounts.bounty_account;
         require!(
@@ -147,9 +264,6 @@ pub mod translation_bounty {
         Ok(())
     }
 
-    /// Admin (whitelisted resolver) settles a dispute.
-    /// `pay_translator = true`  → release funds to translator (work was good).
-    /// `pay_translator = false` → refund funds to author (work was bad).
     pub fn resolve_dispute(
         ctx: Context<ResolveDispute>,
         pay_translator: bool,
@@ -196,7 +310,6 @@ pub mod translation_bounty {
             reward_amount,
         )?;
 
-        // We can't mutably borrow after the immutable borrow above, so update status last
         let bounty = &mut ctx.accounts.bounty_account;
         bounty.status = BountyStatus::Paid;
 
@@ -209,7 +322,6 @@ pub mod translation_bounty {
         Ok(())
     }
 
-    /// Author cancels an open bounty and reclaims their USDC. Only callable while Open.
     pub fn cancel_bounty(ctx: Context<CancelBounty>) -> Result<()> {
         let bounty = &ctx.accounts.bounty_account;
         require!(
@@ -247,8 +359,8 @@ pub mod translation_bounty {
         Ok(())
     }
 
-    /// Permissionless "crank" — anyone can call this once the 48-hour window has expired.
-    /// Requires: status == PendingReview AND current_time > submission_timestamp + 48h.
+    /// Legacy crank — still valid for PendingReview bounties created before
+    /// the AwaitingValidation upgrade. New bounties skip this path entirely.
     pub fn execute_payout(ctx: Context<ExecutePayout>) -> Result<()> {
         let bounty = &ctx.accounts.bounty_account;
         require!(
@@ -307,51 +419,70 @@ pub mod translation_bounty {
 
 #[account]
 pub struct BountyAccount {
-    /// Article author who funded the bounty
     pub author: Pubkey,
-    /// Translator who claimed the job (None until claimed)
     pub translator: Option<Pubkey>,
-    /// Whitelisted dispute resolver
     pub admin: Pubkey,
-    /// USDC reward in base units (6 decimals)
     pub reward_amount: u64,
-    /// Arweave TX ID for the original article (43 bytes)
     pub original_tx_id: String,
-    /// BCP-47 language code or label (e.g. "ES", "Japanese") — max 32 chars
     pub target_language: String,
-    /// Arweave TX ID for the submitted translation (set on submit_translation)
     pub translated_tx_id: Option<String>,
-    /// Unix timestamp when submit_translation was called — starts the 48h clock
     pub submission_timestamp: i64,
     pub status: BountyStatus,
-    /// Used as part of the PDA seed so one author can have many bounties
     pub nonce: u64,
     pub bump: u8,
     pub vault_bump: u8,
 }
 
 impl BountyAccount {
-    /// 8 discriminator + sum of all field sizes + padding
     pub const LEN: usize = 8
-        + 32            // author
-        + (1 + 32)      // translator: Option<Pubkey>
-        + 32            // admin
-        + 8             // reward_amount
-        + (4 + 64)      // original_tx_id: String (max 64 chars)
-        + (4 + 32)      // target_language: String (max 32 chars)
-        + (1 + 4 + 64)  // translated_tx_id: Option<String>
-        + 8             // submission_timestamp
-        + 1             // status
-        + 8             // nonce
-        + 1             // bump
-        + 1;            // vault_bump
+        + 32
+        + (1 + 32)
+        + 32
+        + 8
+        + (4 + 64)
+        + (4 + 32)
+        + (1 + 4 + 64)
+        + 8
+        + 1
+        + 8
+        + 1
+        + 1;
+}
+
+/// Validator consensus state — stored in a separate PDA to avoid resizing BountyAccount.
+/// Seeds: ["validation", bounty_account_pubkey]
+#[account]
+pub struct ValidationRecord {
+    pub bounty: Pubkey,
+    pub validator_1: Option<Pubkey>,
+    pub validator_2: Option<Pubkey>,
+    /// SHA-256 of the Sign Protocol attestation ID string for validator 1
+    pub attestation_id_1: Option<[u8; 32]>,
+    /// SHA-256 of the Sign Protocol attestation ID string for validator 2
+    pub attestation_id_2: Option<[u8; 32]>,
+    pub vote_1: Option<bool>,
+    pub vote_2: Option<bool>,
+    pub bump: u8,
+}
+
+impl ValidationRecord {
+    pub const LEN: usize = 8
+        + 32          // bounty
+        + (1 + 32)    // validator_1
+        + (1 + 32)    // validator_2
+        + (1 + 32)    // attestation_id_1
+        + (1 + 32)    // attestation_id_2
+        + (1 + 1)     // vote_1
+        + (1 + 1)     // vote_2
+        + 1;          // bump
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq)]
 pub enum BountyStatus {
     Open,
     Claimed,
-    PendingReview,
+    PendingReview,        // legacy — kept for in-flight bounties created before this upgrade
+    AwaitingValidation,   // new default after submit_translation
     Disputed,
     Paid,
 }
@@ -375,7 +506,6 @@ pub struct InitializeBounty<'info> {
     )]
     pub bounty_account: Account<'info, BountyAccount>,
 
-    /// PDA-owned SPL token account that holds the escrowed USDC
     #[account(
         init,
         payer = author,
@@ -386,7 +516,6 @@ pub struct InitializeBounty<'info> {
     )]
     pub vault: Account<'info, TokenAccount>,
 
-    /// Author's USDC token account — funds are pulled from here
     #[account(
         mut,
         token::mint = usdc_mint,
@@ -396,7 +525,6 @@ pub struct InitializeBounty<'info> {
 
     pub usdc_mint: Account<'info, Mint>,
 
-    /// Whitelisted dispute resolver — stored as-is, no on-chain check at init
     /// CHECK: Stored in bounty_account.admin; validated on resolve_dispute
     pub admin: UncheckedAccount<'info>,
 
@@ -429,6 +557,77 @@ pub struct SubmitTranslation<'info> {
         bump = bounty_account.bump,
     )]
     pub bounty_account: Account<'info, BountyAccount>,
+
+    /// Initialised here; holds validator slots and attestation hashes
+    #[account(
+        init,
+        payer = translator,
+        space = ValidationRecord::LEN,
+        seeds = [b"validation", bounty_account.key().as_ref()],
+        bump,
+    )]
+    pub validation_record: Account<'info, ValidationRecord>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct RegisterValidator<'info> {
+    #[account(mut)]
+    pub validator: Signer<'info>,
+
+    #[account(
+        seeds = [b"bounty", bounty_account.author.as_ref(), &bounty_account.nonce.to_le_bytes()],
+        bump = bounty_account.bump,
+    )]
+    pub bounty_account: Account<'info, BountyAccount>,
+
+    #[account(
+        mut,
+        seeds = [b"validation", bounty_account.key().as_ref()],
+        bump = validation_record.bump,
+    )]
+    pub validation_record: Account<'info, ValidationRecord>,
+}
+
+#[derive(Accounts)]
+pub struct SubmitValidatorAttestation<'info> {
+    #[account(mut)]
+    pub validator: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"bounty", bounty_account.author.as_ref(), &bounty_account.nonce.to_le_bytes()],
+        bump = bounty_account.bump,
+    )]
+    pub bounty_account: Account<'info, BountyAccount>,
+
+    #[account(
+        mut,
+        seeds = [b"validation", bounty_account.key().as_ref()],
+        bump = validation_record.bump,
+    )]
+    pub validation_record: Account<'info, ValidationRecord>,
+
+    /// Required for potential consensus payout on second vote
+    #[account(
+        mut,
+        seeds = [b"bounty_vault", bounty_account.key().as_ref()],
+        bump = bounty_account.vault_bump,
+        token::mint = usdc_mint,
+        token::authority = bounty_account,
+    )]
+    pub vault: Account<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        token::mint = usdc_mint,
+        constraint = bounty_account.translator == Some(translator_token_account.owner) @ BountyError::InvalidTranslatorAccount,
+    )]
+    pub translator_token_account: Account<'info, TokenAccount>,
+
+    pub usdc_mint: Account<'info, Mint>,
+    pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]
@@ -467,14 +666,9 @@ pub struct ResolveDispute<'info> {
     )]
     pub vault: Account<'info, TokenAccount>,
 
-    /// Receives funds if pay_translator = true
-    #[account(
-        mut,
-        token::mint = usdc_mint,
-    )]
+    #[account(mut, token::mint = usdc_mint)]
     pub translator_token_account: Account<'info, TokenAccount>,
 
-    /// Receives funds if pay_translator = false
     #[account(
         mut,
         token::mint = usdc_mint,
@@ -509,11 +703,7 @@ pub struct CancelBounty<'info> {
     )]
     pub vault: Account<'info, TokenAccount>,
 
-    #[account(
-        mut,
-        token::mint = usdc_mint,
-        token::authority = author,
-    )]
+    #[account(mut, token::mint = usdc_mint, token::authority = author)]
     pub author_token_account: Account<'info, TokenAccount>,
 
     pub usdc_mint: Account<'info, Mint>,
@@ -523,7 +713,6 @@ pub struct CancelBounty<'info> {
 
 #[derive(Accounts)]
 pub struct ExecutePayout<'info> {
-    /// Anyone can crank — no signer constraint beyond paying tx fees
     #[account(mut)]
     pub cranker: Signer<'info>,
 
@@ -543,7 +732,6 @@ pub struct ExecutePayout<'info> {
     )]
     pub vault: Account<'info, TokenAccount>,
 
-    /// Translator's USDC token account — validated against bounty_account.translator
     #[account(
         mut,
         token::mint = usdc_mint,
@@ -577,4 +765,12 @@ pub enum BountyError {
     InvalidTranslatorAccount,
     #[msg("Target language must be 1–32 characters")]
     InvalidLanguage,
+    #[msg("Both validator slots are already filled")]
+    ValidatorSlotsFull,
+    #[msg("Caller is not a registered validator for this bounty")]
+    NotAValidator,
+    #[msg("Validator has already submitted their attestation")]
+    AlreadyAttested,
+    #[msg("The translator cannot validate their own submission")]
+    TranslatorCannotValidate,
 }

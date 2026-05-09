@@ -42,6 +42,27 @@ function TagLegend({ tags }: { tags: SemanticTag[] }) {
   );
 }
 
+function cap(s: string) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function SemanticHighlight({ tag }: { tag: SemanticTag }) {
+  const style = KEY_COLORS[tag.key] ?? FALLBACK;
+  const label = `${cap(style.label)}: ${cap(tag.value)}`;
+
+  return (
+    <span className="relative inline group/tag">
+      <span className={`${style.bg} ${style.text} rounded px-0.5 cursor-help`}>
+        {tag.phrase}
+      </span>
+      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 whitespace-nowrap rounded-lg bg-ink px-2.5 py-1 text-xs font-medium text-white opacity-0 shadow-md transition-opacity duration-150 group-hover/tag:opacity-100 z-50">
+        {label}
+        <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-ink" />
+      </span>
+    </span>
+  );
+}
+
 function renderInlineContent(block: { rawText: string; tags: SemanticTag[]; startOffset: number }): React.ReactNode[] {
   const { rawText, tags, startOffset } = block;
   const nodes: React.ReactNode[] = [];
@@ -55,16 +76,7 @@ function renderInlineContent(block: { rawText: string; tags: SemanticTag[]; star
       nodes.push(<span key={`t-${pos}`}>{rawText.slice(pos, relStart)}</span>);
     }
 
-    const style = KEY_COLORS[tag.key] ?? FALLBACK;
-    nodes.push(
-      <span
-        key={`h-${tag.startIndex}`}
-        className={`${style.bg} ${style.text} rounded px-0.5 cursor-help`}
-        title={`${tag.key}: ${tag.value}`}
-      >
-        {tag.phrase}
-      </span>
-    );
+    nodes.push(<SemanticHighlight key={`h-${tag.startIndex}`} tag={tag} />);
 
     pos = relEnd;
   }

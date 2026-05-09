@@ -4,11 +4,23 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useWallets } from '@privy-io/react-auth/solana';
 import { PublicKey } from '@solana/web3.js';
-import { ArrowLeft, Upload, Loader2, AlertCircle, Globe } from 'lucide-react';
+import { ArrowLeft, Upload, Loader2, AlertCircle, Globe, Sparkles, ChevronDown } from 'lucide-react';
 import { useBounty, type BountyAccount } from '@/hooks/useBounty';
 import { parseMdh, type ParsedMdh } from '@/lib/mdh-utils';
 import MdhRenderer from '@/app/components/MdhRenderer';
 import { toast } from 'sonner';
+
+interface ReasoningItem {
+  phrase: string;
+  tagKey: string;
+  tagValue: string;
+  explanation: string;
+}
+
+interface AISuggestion {
+  translatedText: string;
+  reasoning: ReasoningItem[];
+}
 
 const IRYS_GATEWAY = process.env.NEXT_PUBLIC_IRYS_NODE_URL ?? 'https://devnet.irys.xyz';
 
@@ -30,6 +42,9 @@ export default function WorkspacePage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [aiSuggestion, setAiSuggestion] = useState<AISuggestion | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiReasoningOpen, setAiReasoningOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -50,6 +65,18 @@ export default function WorkspacePage() {
       if (!res.ok) throw new Error(`Failed to fetch original content (${res.status})`);
       const raw = await res.text();
       setOriginalParsed(parseMdh(raw));
+
+      // Auto-generate AI translation suggestion in the background
+      setAiLoading(true);
+      fetch('/api/interpret', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: raw, targetLang: data.targetLanguage }),
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+        .then((result: AISuggestion) => setAiSuggestion(result))
+        .catch(() => { /* silent — AI suggestion is best-effort */ })
+        .finally(() => setAiLoading(false));
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -183,6 +210,65 @@ export default function WorkspacePage() {
               </span>
             </div>
 
+            {/* AI suggestion panel */}
+            {(aiLoading || aiSuggestion) && (
+              <div className="mb-6 rounded-2xl border border-violet-200 bg-violet-50/60 overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-3 border-b border-violet-100">
+                  <div className="flex items-center gap-2 text-violet-700 text-sm font-medium">
+                    <Sparkles size={14} />
+                    AI Suggestion
+                  </div>
+                  {aiLoading && <Loader2 size={14} className="animate-spin text-violet-400" />}
+                  {aiSuggestion && (
+                    <button
+                      onClick={() => {
+                        const raw = aiSuggestion.translatedText;
+                        setTranslatedRaw(raw);
+                        setTranslatedParsed(parseMdh(raw));
+                        toast.success('AI suggestion loaded as starting point');
+                      }}
+                      className="text-xs px-3 py-1.5 bg-violet-700 text-white rounded-lg hover:bg-violet-800 transition-colors"
+                    >
+                      Use as Starting Point
+                    </button>
+                  )}
+                </div>
+                {aiSuggestion && (
+                  <div className="px-5 py-4">
+                    <p className="text-sm text-stone-700 leading-relaxed whitespace-pre-wrap">
+                      {aiSuggestion.translatedText}
+                    </p>
+                    {aiSuggestion.reasoning.length > 0 && (
+                      <div className="mt-3">
+                        <button
+                          onClick={() => setAiReasoningOpen((v) => !v)}
+                          className="flex items-center gap-1.5 text-xs text-violet-500 hover:text-violet-700 transition-colors"
+                        >
+                          <ChevronDown
+                            size={12}
+                            className={`transition-transform ${aiReasoningOpen ? 'rotate-180' : ''}`}
+                          />
+                          {aiSuggestion.reasoning.length} semantic decisions
+                        </button>
+                        {aiReasoningOpen && (
+                          <ul className="mt-2 space-y-2">
+                            {aiSuggestion.reasoning.map((r, i) => (
+                              <li key={i} className="text-xs text-stone-500 bg-white rounded-lg px-3 py-2 border border-violet-100">
+                                <span className="font-mono text-violet-600">{r.tagKey}={r.tagValue}</span>
+                                {' · '}
+                                <span className="italic">"{r.phrase}"</span>
+                                {r.explanation && <> — {r.explanation}</>}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* File import */}
             <div className="mb-6">
               <input
@@ -226,7 +312,7 @@ export default function WorkspacePage() {
         <div className="mt-8 flex justify-end items-center gap-4">
           {submitSuccess && (
             <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 px-5 py-3 rounded-xl">
-              Translation submitted. The 48-hour review window has started.
+              Translation submitted — awaiting validator review.
             </p>
           )}
           <button
