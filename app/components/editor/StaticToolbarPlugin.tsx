@@ -113,7 +113,7 @@ export default function StaticToolbarPlugin() {
   };
 
   return (
-    <div className="sticky top-[138px] z-30 border-b border-gray-100 bg-white/95 backdrop-blur">
+    <div className="sticky top-[148px] z-30 border-b border-gray-100 bg-white/95 backdrop-blur">
       <div className="mx-auto flex max-w-3xl items-center justify-center gap-1 px-4 py-3 flex-wrap">
         {buttons.map((button) => (
           <ToolbarButton key={button.label} label={button.label} onClick={button.onClick} icon={button.icon} />

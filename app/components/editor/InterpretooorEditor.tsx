@@ -6,6 +6,8 @@ import { LexicalComposer, type InitialConfigType } from '@lexical/react/LexicalC
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
 import { MarkdownShortcutPlugin } from '@lexical/react/LexicalMarkdownShortcutPlugin';
+import { TRANSFORMERS } from '@lexical/markdown';
+import { ListPlugin } from '@lexical/react/LexicalListPlugin';
 import { OnChangePlugin } from '@lexical/react/LexicalOnChangePlugin';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { HorizontalRuleNode } from '@lexical/react/LexicalHorizontalRuleNode';
@@ -220,6 +222,18 @@ export default function InterpretooorEditor() {
           h3: 'text-2xl font-serif italic font-normal tracking-tight text-ink',
         },
         paragraph: 'mb-4 leading-relaxed text-ink/90 text-[18px] md:text-[20px] lg:text-[21px]',
+        quote: 'border-l-4 border-gray-300 pl-4 py-2 my-4 italic text-gray-700 bg-gray-50/50 rounded-r-lg',
+        code: 'bg-gray-100 rounded-md px-1.5 py-0.5 font-mono text-[0.9em] text-red-600',
+        horizontalRule: 'border-t border-gray-200 my-8',
+        link: 'text-orange-600 underline underline-offset-4 hover:text-orange-700 transition-colors cursor-pointer',
+        list: {
+          nested: {
+            listitem: 'list-none',
+          },
+          ol: 'list-decimal ml-8 mb-4 space-y-2',
+          ul: 'list-disc ml-8 mb-4 space-y-2',
+          listitem: 'pl-1 leading-relaxed',
+        },
         text: {
           bold: 'font-semibold',
           italic: 'italic',
@@ -244,8 +258,8 @@ export default function InterpretooorEditor() {
   }
 
   return (
-    <div className="min-h-screen bg-white text-ink">
-      <header className="sticky top-0 z-40 w-full border-b border-gray-100 bg-white">
+    <div className="min-h-screen bg-white text-ink pt-20">
+      <header className="sticky top-20 z-40 w-full border-b border-gray-100 bg-white">
         <div className="flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-4">
             <button
@@ -336,7 +350,7 @@ export default function InterpretooorEditor() {
               <div className={isPreview ? 'hidden' : 'block'}>
                 <RichTextPlugin
                   contentEditable={
-                    <ContentEditable className="min-h-[60vh] w-full border-none bg-transparent text-lg leading-relaxed outline-none caret-black focus:outline-none md:text-xl" />
+                    <ContentEditable className="lexical-content min-h-[60vh] w-full border-none bg-transparent text-lg leading-relaxed outline-none caret-black focus:outline-none md:text-xl" />
                   }
                   placeholder={<EditorPlaceholder />}
                   ErrorBoundary={({ children }) => children}
@@ -344,7 +358,8 @@ export default function InterpretooorEditor() {
               </div>
               {isPreview && <LexicalPreview />}
               <HistoryPlugin />
-              <MarkdownShortcutPlugin />
+              <ListPlugin />
+              <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
               <OnChangePlugin
                 onChange={(editorState: EditorState) => {
                   const content = editorState.toJSON();

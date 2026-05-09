@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LexicalEditor } from 'lexical';
 import { deserialiseMdhToLexical } from '@/lib/mdh-lexical-bridge';
 
-function draftKey(walletAddress: string): string {
-  return `draft-${walletAddress}`;
+function draftCacheKey(walletAddress: string): string {
+  return `draft-cache-${walletAddress}`;
 }
 
 export type DraftDocument = {
+  id?: string; // Optional ID for Supabase persistence
   content: unknown;
   metadata: {
     authorPubkey: string;
@@ -46,24 +47,6 @@ export const defaultDraft: DraftDocument = {
   version: 1,
 };
 
-function loadFromStorage(walletAddress: string): DraftDocument {
-  if (typeof window === 'undefined') return defaultDraft;
-  const stored = window.localStorage.getItem(draftKey(walletAddress));
-  if (!stored) {
-    return { ...defaultDraft, metadata: { ...defaultDraft.metadata, authorPubkey: walletAddress } };
-  }
-  try {
-    const parsed = JSON.parse(stored) as DraftDocument;
-    return {
-      ...defaultDraft,
-      ...parsed,
-      metadata: { ...defaultDraft.metadata, ...parsed.metadata },
-    };
-  } catch {
-    return { ...defaultDraft, metadata: { ...defaultDraft.metadata, authorPubkey: walletAddress } };
-  }
-}
-
 export interface SavedDraftEntry {
   key: string;
   title: string;
@@ -71,18 +54,17 @@ export interface SavedDraftEntry {
 }
 
 /**
- * Owns all draft state and localStorage persistence for the editor.
- * Draft storage is keyed per wallet: draft-${walletAddress}.
- * When walletAddress changes the hook reloads from the new wallet's key
- * and bumps composerKey so LexicalComposer remounts with fresh content.
+ * Owns all draft state and Supabase persistence for the editor.
+ * Maintains a localStorage write-through cache for instant hydration.
  */
 export function useDraftPersistence(walletAddress?: string, editor?: LexicalEditor | null) {
   const [isReady, setIsReady] = useState(false);
   const [draft, setDraft] = useState<DraftDocument>(defaultDraft);
   const [title, setTitle] = useState(defaultDraft.metadata.title);
   const [sourceLanguage, setSourceLanguage] = useState(defaultDraft.metadata.sourceLanguage);
-  // Bumping this causes LexicalComposer to remount with the current draft.content
   const [composerKey, setComposerKey] = useState(0);
+  const [activeDraftId, setActiveDraftId] = useState<string | undefined>();
+  const [savedDrafts, setSavedDrafts] = useState<SavedDraftEntry[]>([]);
 
   const latestContentRef = useRef<unknown>(null);
   const initialContentRef = useRef<unknown>(null);
@@ -93,7 +75,13 @@ export function useDraftPersistence(walletAddress?: string, editor?: LexicalEdit
     [walletAddress]
   );
 
-  // Reload from wallet-scoped key whenever the connected wallet changes
+  // Helper to sync to localStorage cache
+  const updateCache = useCallback((doc: DraftDocument) => {
+    if (typeof window === 'undefined' || !walletAddress) return;
+    window.localStorage.setItem(draftCacheKey(walletAddress), JSON.stringify(doc));
+  }, [walletAddress]);
+
+  // Initial load and wallet change
   useEffect(() => {
     if (!walletAddress) {
       initialContentRef.current = defaultDraft.content;
@@ -101,20 +89,80 @@ export function useDraftPersistence(walletAddress?: string, editor?: LexicalEdit
       setDraft(defaultDraft);
       setTitle(defaultDraft.metadata.title);
       setSourceLanguage(defaultDraft.metadata.sourceLanguage);
+      setActiveDraftId(undefined);
+      setSavedDrafts([]);
       setComposerKey((k) => k + 1);
       setIsReady(true);
       return;
     }
 
-    const loaded = loadFromStorage(walletAddress);
-    initialContentRef.current = loaded.content;
-    latestContentRef.current = null;
-    setDraft(loaded);
-    setTitle(loaded.metadata.title);
-    setSourceLanguage(loaded.metadata.sourceLanguage);
-    setComposerKey((k) => k + 1);
-    setIsReady(true);
-  }, [walletAddress]);
+    const init = async () => {
+      // 1. Instant hydration from cache
+      const cached = window.localStorage.getItem(draftCacheKey(walletAddress));
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached) as DraftDocument;
+          initialContentRef.current = parsed.content;
+          setDraft(parsed);
+          setTitle(parsed.metadata.title);
+          setSourceLanguage(parsed.metadata.sourceLanguage);
+          setActiveDraftId(parsed.id);
+          setComposerKey((k) => k + 1);
+        } catch (e) {
+          console.error('Failed to parse cached draft', e);
+        }
+      }
+
+      // 2. Fetch list from API
+      try {
+        const res = await fetch(`/api/drafts?wallet=${walletAddress}`);
+        if (res.ok) {
+          const list = await res.json();
+          const mappedList: SavedDraftEntry[] = list.map((d: any) => ({
+            key: d.id,
+            title: d.title,
+            updatedAt: d.updated_at,
+          }));
+          setSavedDrafts(mappedList);
+
+          // 3. Load most recent draft if we don't have one or if cache is old
+          if (list.length > 0) {
+            const mostRecent = list[0];
+            // Only auto-load if we don't have an active draft OR if the remote is newer
+            if (!activeDraftId || new Date(mostRecent.updated_at) > new Date(draft.updatedAt)) {
+              const detailRes = await fetch(`/api/drafts/${mostRecent.id}?wallet=${walletAddress}`);
+              if (detailRes.ok) {
+                const fullDraft = await detailRes.json();
+                const doc: DraftDocument = {
+                  id: fullDraft.id,
+                  content: fullDraft.content,
+                  metadata: {
+                    authorPubkey: fullDraft.wallet,
+                    sourceLanguage: fullDraft.source_lang,
+                    title: fullDraft.title,
+                  },
+                  updatedAt: fullDraft.updated_at,
+                  version: 1,
+                };
+                initialContentRef.current = doc.content;
+                setDraft(doc);
+                setTitle(doc.metadata.title);
+                setSourceLanguage(doc.metadata.sourceLanguage);
+                setActiveDraftId(doc.id);
+                setComposerKey((k) => k + 1);
+                updateCache(doc);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch drafts', e);
+      }
+      setIsReady(true);
+    };
+
+    void init();
+  }, [walletAddress]); // Intentionally omitting many deps to prevent infinite loops, init runs once per wallet change
 
   // Hydrate editor when content was saved as a raw .mdh string
   useEffect(() => {
@@ -128,93 +176,173 @@ export function useDraftPersistence(walletAddress?: string, editor?: LexicalEdit
   }, [isReady, editor]);
 
   const persistDraft = useCallback(
-    (content: unknown) => {
+    async (content: unknown) => {
       if (typeof window === 'undefined' || !walletAddress) return;
-      const next: DraftDocument = {
-        content,
-        metadata: { authorPubkey: activeAuthorPubkey, sourceLanguage, title },
-        updatedAt: new Date().toISOString(),
-        version: 1,
-      };
-      window.localStorage.setItem(draftKey(walletAddress), JSON.stringify(next));
-      setDraft(next);
+
+      const currentTitle = title;
+      const currentLang = sourceLanguage;
+      const currentId = activeDraftId;
+
+      try {
+        let savedId = currentId;
+        if (currentId) {
+          // PATCH
+          const res = await fetch(`/api/drafts/${currentId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              wallet: walletAddress,
+              title: currentTitle,
+              content,
+              source_lang: currentLang,
+            }),
+          });
+          if (!res.ok) throw new Error('Failed to patch draft');
+        } else {
+          // POST
+          const res = await fetch('/api/drafts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              wallet: walletAddress,
+              title: currentTitle,
+              content,
+              source_lang: currentLang,
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            savedId = data.id;
+            setActiveDraftId(savedId);
+          } else {
+            throw new Error('Failed to create draft');
+          }
+        }
+
+        const next: DraftDocument = {
+          id: savedId,
+          content,
+          metadata: { authorPubkey: activeAuthorPubkey, sourceLanguage: currentLang, title: currentTitle },
+          updatedAt: new Date().toISOString(),
+          version: 1,
+        };
+        setDraft(next);
+        updateCache(next);
+        
+        // Refresh list silently
+        const listRes = await fetch(`/api/drafts?wallet=${walletAddress}`);
+        if (listRes.ok) {
+          const list = await listRes.json();
+          setSavedDrafts(list.map((d: any) => ({
+            key: d.id,
+            title: d.title,
+            updatedAt: d.updated_at,
+          })));
+        }
+      } catch (e) {
+        console.error('Persistence failed', e);
+      }
     },
-    [activeAuthorPubkey, sourceLanguage, title, walletAddress]
+    [activeAuthorPubkey, sourceLanguage, title, walletAddress, activeDraftId, updateCache]
   );
 
-  // Re-persist when metadata (title / language) changes
+  // Re-persist when metadata changes
   useEffect(() => {
-    if (!isReady) return;
-    persistDraft(latestContentRef.current ?? initialContentRef.current);
-  }, [isReady, persistDraft]);
+    if (!isReady || !walletAddress) return;
+    const content = latestContentRef.current ?? initialContentRef.current;
+    persistDraft(content);
+  }, [title, sourceLanguage]);
 
   const schedulePersist = useCallback(
     (content: unknown) => {
       latestContentRef.current = content;
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
       saveTimerRef.current = window.setTimeout(() => {
-        persistDraft(content);
+        void persistDraft(content);
         saveTimerRef.current = null;
       }, 250);
     },
     [persistDraft]
   );
 
-  /** Clear the current draft and start fresh. Remounts the editor. */
-  const clearDraft = useCallback(() => {
+  const clearDraft = useCallback(async () => {
     if (typeof window === 'undefined' || !walletAddress) return;
-    window.localStorage.removeItem(draftKey(walletAddress));
-    const fresh: DraftDocument = {
-      ...defaultDraft,
-      metadata: { ...defaultDraft.metadata, authorPubkey: walletAddress },
-    };
-    initialContentRef.current = fresh.content;
-    latestContentRef.current = null;
-    setDraft(fresh);
-    setTitle(fresh.metadata.title);
-    setSourceLanguage(fresh.metadata.sourceLanguage);
-    setComposerKey((k) => k + 1);
-  }, [walletAddress]);
 
-  /** List all localStorage drafts for the current wallet, newest first. */
-  const getSavedDraftKeys = useCallback((): SavedDraftEntry[] => {
-    if (typeof window === 'undefined' || !walletAddress) return [];
-    const prefix = `draft-${walletAddress}`;
-    return Object.keys(window.localStorage)
-      .filter((k) => k.startsWith(prefix))
-      .map((k) => {
-        try {
-          const d = JSON.parse(window.localStorage.getItem(k) ?? '{}') as DraftDocument;
-          return { key: k, title: d.metadata?.title ?? 'Untitled', updatedAt: d.updatedAt ?? '' };
-        } catch {
-          return { key: k, title: 'Untitled', updatedAt: '' };
-        }
-      })
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  }, [walletAddress]);
+    const res = await fetch('/api/drafts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        wallet: walletAddress,
+        title: defaultDraft.metadata.title,
+        content: defaultDraft.content,
+        source_lang: defaultDraft.metadata.sourceLanguage,
+      }),
+    });
 
-  /** Load a specific draft by its localStorage key. Remounts the editor. */
-  const loadDraftByKey = useCallback((storageKey: string) => {
-    if (typeof window === 'undefined') return;
-    try {
-      const stored = window.localStorage.getItem(storageKey);
-      if (!stored) return;
-      const parsed = JSON.parse(stored) as DraftDocument;
-      const loaded = {
-        ...defaultDraft,
-        ...parsed,
-        metadata: { ...defaultDraft.metadata, ...parsed.metadata },
+    if (res.ok) {
+      const data = await res.json();
+      const fresh: DraftDocument = {
+        id: data.id,
+        content: defaultDraft.content,
+        metadata: { ...defaultDraft.metadata, authorPubkey: walletAddress },
+        updatedAt: new Date().toISOString(),
+        version: 1,
       };
-      initialContentRef.current = loaded.content;
+      initialContentRef.current = fresh.content;
       latestContentRef.current = null;
-      setDraft(loaded);
-      setTitle(loaded.metadata.title);
-      setSourceLanguage(loaded.metadata.sourceLanguage);
+      setDraft(fresh);
+      setTitle(fresh.metadata.title);
+      setSourceLanguage(fresh.metadata.sourceLanguage);
+      setActiveDraftId(fresh.id);
       setComposerKey((k) => k + 1);
-    } catch {
-      // ignore corrupt data
+      updateCache(fresh);
+      
+      const listRes = await fetch(`/api/drafts?wallet=${walletAddress}`);
+      if (listRes.ok) {
+        const list = await listRes.json();
+        setSavedDrafts(list.map((d: any) => ({
+          key: d.id,
+          title: d.title,
+          updatedAt: d.updated_at,
+        })));
+      }
     }
-  }, []);
+  }, [walletAddress, activeDraftId, updateCache]);
+
+  const getSavedDraftKeys = useCallback((): SavedDraftEntry[] => {
+    return savedDrafts;
+  }, [savedDrafts]);
+
+  const loadDraftByKey = useCallback(async (id: string) => {
+    if (typeof window === 'undefined' || !walletAddress) return;
+    try {
+      const res = await fetch(`/api/drafts/${id}?wallet=${walletAddress}`);
+      if (res.ok) {
+        const fullDraft = await res.json();
+        const doc: DraftDocument = {
+          id: fullDraft.id,
+          content: fullDraft.content,
+          metadata: {
+            authorPubkey: fullDraft.wallet,
+            sourceLanguage: fullDraft.source_lang,
+            title: fullDraft.title,
+          },
+          updatedAt: fullDraft.updated_at,
+          version: 1,
+        };
+        initialContentRef.current = doc.content;
+        latestContentRef.current = null;
+        setDraft(doc);
+        setTitle(doc.metadata.title);
+        setSourceLanguage(doc.metadata.sourceLanguage);
+        setActiveDraftId(doc.id);
+        setComposerKey((k) => k + 1);
+        updateCache(doc);
+      }
+    } catch (e) {
+      console.error('Failed to load draft', e);
+    }
+  }, [walletAddress, updateCache]);
 
   return {
     isReady,

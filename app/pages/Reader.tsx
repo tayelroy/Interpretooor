@@ -42,7 +42,7 @@ function TagLegend({ tags }: { tags: SemanticTag[] }) {
   );
 }
 
-function renderParagraphInline(block: ParagraphBlock): React.ReactNode[] {
+function renderInlineContent(block: { rawText: string; tags: SemanticTag[]; startOffset: number }): React.ReactNode[] {
   const { rawText, tags, startOffset } = block;
   const nodes: React.ReactNode[] = [];
   let pos = 0;
@@ -178,6 +178,22 @@ export default function Reader({ assetId }: { assetId: string }) {
                 );
               }
 
+              if (block.type === 'list') {
+                const ListTag = block.ordered ? 'ol' : 'ul';
+                return (
+                  <ListTag
+                    key={i}
+                    className={`ml-6 mb-6 space-y-3 ${block.ordered ? 'list-decimal' : 'list-disc'}`}
+                  >
+                    {block.items.map((item, j) => (
+                      <li key={j} className="font-sans text-[18px] leading-[1.8] text-charcoal-text font-light tracking-tight">
+                        {item.tags.length > 0 ? renderInlineContent(item) : item.rawText}
+                      </li>
+                    ))}
+                  </ListTag>
+                );
+              }
+
               const strippedRaw = block.rawText.replace(/!\[.*?\]\(.*?\)/g, '').trim();
               if (!strippedRaw) return null;
               const strippedBlock = { ...block, rawText: strippedRaw };
@@ -191,12 +207,13 @@ export default function Reader({ assetId }: { assetId: string }) {
                     isFirst ? 'text-[20px] leading-[1.75] text-ink/90' : ''
                   }`}
                 >
-                  {strippedBlock.tags.length > 0 ? renderParagraphInline(strippedBlock) : strippedRaw}
+                  {strippedBlock.tags.length > 0 ? renderInlineContent(strippedBlock) : strippedRaw}
                 </p>
               );
             })}
           </div>
         )}
+
 
         {/* Footer */}
         {!loading && data && (
