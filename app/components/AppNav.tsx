@@ -2,19 +2,23 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useWallets } from '@privy-io/react-auth/solana';
 import { cn } from '../lib/utils';
 import { motion } from 'motion/react';
 import ConnectWalletButton from './ConnectWalletButton';
 
 const navItems = [
-  { label: 'Home', href: '/app' },
+  { label: 'Home',      href: '/app' },
   { label: 'Translate', href: '/app/translate' },
-  { label: 'Validate', href: '/app/validate' },
-  { label: 'Write', href: '/app/write' },
+  { label: 'Validate',  href: '/app/validate' },
+  { label: 'Write',     href: '/app/write' },
+  { label: 'Dashboard', href: '/app/dashboard' },
 ];
 
 export default function AppNav() {
   const pathname = usePathname();
+  const { wallets } = useWallets();
+  const walletAddress = wallets[0]?.address;
 
   return (
     <nav className="fixed top-0 left-0 w-full z-[100] h-20 bg-ink/80 backdrop-blur-xl border-b border-white/5 px-8 flex items-center justify-between">
@@ -50,7 +54,16 @@ export default function AppNav() {
       </div>
 
       <div className="flex items-center gap-4">
-<ConnectWalletButton />
+        {walletAddress && (
+          <Link
+            href={`/app/profile/${walletAddress}`}
+            className="w-8 h-8 rounded-full bg-pale-lavender/20 border border-pale-lavender/40 flex items-center justify-center text-pale-lavender text-xs font-mono hover:bg-pale-lavender/30 transition-colors"
+            title="My Profile"
+          >
+            {walletAddress.slice(0, 2)}
+          </Link>
+        )}
+        <ConnectWalletButton />
       </div>
     </nav>
   );
