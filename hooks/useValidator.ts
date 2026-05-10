@@ -1,14 +1,10 @@
 'use client';
 
 /**
- * useValidator — React hook for Sign Protocol attestation + on-chain validator operations.
- *
- * Flow per validator:
- *   1. registerValidator(bountyPda)     — claim a slot on the ValidationRecord
- *   2. submitAttestation(params)        — upload assessment JSON to Arweave, create
- *                                         Sign Protocol off-chain attestation, then
- *                                         record the attestation ID hash on-chain.
- *                                         On the 2nd attestation + both approve → auto-pay.
+ * useValidator — React hook for validator operations:
+ *   - stakeUsdc / requestUnstake / completeUnstake  (persistent stake vault)
+ *   - registerValidator  (locks stake for a specific bounty)
+ *   - submitAttestation  (Arweave upload + on-chain attestation)
  */
 
 import { useCallback } from 'react';
@@ -20,10 +16,16 @@ import {
   TOKEN_PROGRAM_ID,
 } from '@solana/spl-token';
 import { createPrivyToSolanaAdapter } from '@/lib/solana/privy-adapter';
-import { deriveValidationPda, deriveVaultPda, type BountyAccount } from './useBounty';
+import {
+  deriveValidationPda,
+  deriveVaultPda,
+  deriveValidatorStakePda,
+  deriveValidatorStakeVaultPda,
+  type BountyAccount,
+} from './useBounty';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const BOUNTY_IDL = require('../anchor/target/idl/translation_bounty.json');
+const BOUNTY_IDL = require('../lib/idl/translation_bounty.json');
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -49,6 +51,19 @@ export interface ValidationRecord {
   vote1: boolean | null;
   vote2: boolean | null;
   bump: number;
+  validator1Stake: anchor.BN;
+  validator2Stake: anchor.BN;
+}
+
+export interface ValidatorStakeAccountData {
+  publicKey: PublicKey;
+  owner: PublicKey;
+  amount: anchor.BN;
+  locked: anchor.BN;
+  unlockAt: anchor.BN;
+  unlockAmount: anchor.BN;
+  bump: number;
+  vaultBump: number;
 }
 
 export interface TagDecision {
@@ -96,7 +111,34 @@ export function useValidator() {
     []
   );
 
-  // ── Fetch ─────────────────────────────────────────────────────────────────
+  // ── Stake account fetch ───────────────────────────────────────────────────
+
+  const fetchStakeAccount = useCallback(
+    async (validatorPubkey: PublicKey): Promise<ValidatorStakeAccountData | null> => {
+      const provider = buildProvider();
+      const program = buildProgram(provider);
+      const [stakeAccountPda] = deriveValidatorStakePda(validatorPubkey);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const raw = await (program.account as any)['validatorStakeAccount'].fetch(stakeAccountPda);
+        return {
+          publicKey: stakeAccountPda,
+          owner: raw.owner,
+          amount: raw.amount,
+          locked: raw.locked,
+          unlockAt: raw.unlockAt,
+          unlockAmount: raw.unlockAmount,
+          bump: raw.bump,
+          vaultBump: raw.vaultBump,
+        };
+      } catch {
+        return null;
+      }
+    },
+    [buildProvider, buildProgram]
+  );
+
+  // ── Validation record fetch ───────────────────────────────────────────────
 
   const fetchValidationRecord = useCallback(
     async (bountyPda: PublicKey): Promise<ValidationRecord> => {
@@ -115,25 +157,118 @@ export function useValidator() {
         vote1: raw.vote1 ?? null,
         vote2: raw.vote2 ?? null,
         bump: raw.bump,
+        validator1Stake: raw.validator1Stake ?? new anchor.BN(0),
+        validator2Stake: raw.validator2Stake ?? new anchor.BN(0),
       };
     },
     [buildProvider, buildProgram]
   );
 
-  // ── Register ──────────────────────────────────────────────────────────────
+  // ── Stake USDC into the persistent validator vault ────────────────────────
+
+  const stakeUsdc = useCallback(
+    async (amountUsdc: number): Promise<string> => {
+      const provider = buildProvider();
+      const program = buildProgram(provider);
+      const validatorPubkey = provider.wallet.publicKey;
+
+      const amountRaw = new anchor.BN(amountUsdc * 1_000_000);
+      const [stakeAccount] = deriveValidatorStakePda(validatorPubkey);
+      const [stakeVault] = deriveValidatorStakeVaultPda(validatorPubkey);
+      const validatorTokenAccount = getAssociatedTokenAddressSync(USDC_MINT, validatorPubkey);
+
+      const sig = await program.methods
+        .stake(amountRaw)
+        .accounts({
+          validator: validatorPubkey,
+          stakeAccount,
+          stakeVault,
+          validatorTokenAccount,
+          usdcMint: USDC_MINT,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .rpc();
+
+      console.log('stake tx:', sig);
+      return sig;
+    },
+    [buildProvider, buildProgram]
+  );
+
+  // ── Request to begin the 3-day unstake cooldown ───────────────────────────
+
+  const requestUnstake = useCallback(
+    async (amountUsdc: number): Promise<string> => {
+      const provider = buildProvider();
+      const program = buildProgram(provider);
+      const validatorPubkey = provider.wallet.publicKey;
+
+      const amountRaw = new anchor.BN(amountUsdc * 1_000_000);
+      const [stakeAccount] = deriveValidatorStakePda(validatorPubkey);
+
+      const sig = await program.methods
+        .requestUnstake(amountRaw)
+        .accounts({
+          validator: validatorPubkey,
+          stakeAccount,
+        })
+        .rpc();
+
+      console.log('requestUnstake tx:', sig);
+      return sig;
+    },
+    [buildProvider, buildProgram]
+  );
+
+  // ── Complete unstake after lockup ─────────────────────────────────────────
+
+  const completeUnstake = useCallback(
+    async (): Promise<string> => {
+      const provider = buildProvider();
+      const program = buildProgram(provider);
+      const validatorPubkey = provider.wallet.publicKey;
+
+      const [stakeAccount] = deriveValidatorStakePda(validatorPubkey);
+      const [stakeVault] = deriveValidatorStakeVaultPda(validatorPubkey);
+      const validatorTokenAccount = getAssociatedTokenAddressSync(USDC_MINT, validatorPubkey);
+
+      const sig = await program.methods
+        .completeUnstake()
+        .accounts({
+          validator: validatorPubkey,
+          stakeAccount,
+          stakeVault,
+          validatorTokenAccount,
+          usdcMint: USDC_MINT,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+
+      console.log('completeUnstake tx:', sig);
+      return sig;
+    },
+    [buildProvider, buildProgram]
+  );
+
+  // ── Register as validator (locks stake, no USDC transfer) ────────────────
 
   const registerValidator = useCallback(
     async (bountyPda: PublicKey): Promise<string> => {
       const provider = buildProvider();
       const program = buildProgram(provider);
+      const validatorPubkey = provider.wallet.publicKey;
+
       const [validationRecord] = deriveValidationPda(bountyPda);
+      const [validatorStakeAccount] = deriveValidatorStakePda(validatorPubkey);
 
       const sig = await program.methods
         .registerValidator()
         .accounts({
-          validator: provider.wallet.publicKey,
+          validator: validatorPubkey,
           bountyAccount: bountyPda,
           validationRecord,
+          validatorStakeAccount,
         })
         .rpc();
 
@@ -146,29 +281,29 @@ export function useValidator() {
   // ── Submit attestation ────────────────────────────────────────────────────
 
   /**
-   * Attestation flow (Solana-native, no external attestation service):
+   * Attestation flow:
    *   1. Upload assessment JSON to Arweave → permanent immutable record
    *   2. POST to /api/validate/hash → SHA-256 of the assessment (on-chain commitment)
-   *   3. Call submit_validator_attestation on Anchor — validator's Solana key signs
-   *      the tx, which is the cryptographic proof. The assessment hash + Arweave TX
-   *      together form a complete, verifiable audit trail.
+   *   3. Call submit_validator_attestation — validator's Solana key signs the tx.
+   *
+   * On the 2nd attestation, the program settles automatically:
+   *   - both approve → pays each validator 40% from bounty vault; stake unlocked
+   *   - both reject  → pays 2% each; 96% refunded to author; stake unlocked
+   *   - split        → status = Disputed; AI oracle resolves via crank
    */
   const submitAttestation = useCallback(
     async (params: {
       bountyPda: PublicKey;
       bountyData: BountyAccount;
+      validationRecord: ValidationRecord;
       tagDecisions: TagDecision[];
       approve: boolean;
     }): Promise<{ assessmentArweaveTxId: string; sig: string }> => {
-      const { bountyPda, bountyData, tagDecisions, approve } = params;
+      const { bountyPda, bountyData, validationRecord, tagDecisions, approve } = params;
 
       const provider = buildProvider();
       const program = buildProgram(provider);
       const validatorPubkey = provider.wallet.publicKey.toBase58();
-
-      if (!bountyData.translator) {
-        throw new Error('Bounty has no translator — cannot submit attestation');
-      }
 
       // ── 1. Upload assessment JSON to Arweave ─────────────────────────────
       const assessmentPayload: AssessmentPayload = {
@@ -215,22 +350,40 @@ export function useValidator() {
       if (!hashRes.ok) throw new Error('Failed to hash assessment');
       const { hash: assessmentHash } = await hashRes.json() as { hash: number[] };
 
-      // ── 3. Record on-chain — validator's Solana key signs the tx ─────────
-      const [validationRecord] = deriveValidationPda(bountyPda);
+      // ── 3. Build accounts for on-chain settlement ─────────────────────────
+      const [validationRecordPda] = deriveValidationPda(bountyPda);
       const [vault] = deriveVaultPda(bountyPda);
-      const translatorTokenAccount = getAssociatedTokenAddressSync(
-        USDC_MINT,
-        bountyData.translator
-      );
 
+      if (!validationRecord.validator1 || !validationRecord.validator2) {
+        throw new Error('Both validator slots must be filled before submitting attestation');
+      }
+
+      const validator1TokenAccount = getAssociatedTokenAddressSync(USDC_MINT, validationRecord.validator1);
+      const validator2TokenAccount = getAssociatedTokenAddressSync(USDC_MINT, validationRecord.validator2);
+      const authorTokenAccount = getAssociatedTokenAddressSync(USDC_MINT, bountyData.author);
+
+      const adminPubkey = new PublicKey(
+        process.env.NEXT_PUBLIC_ADMIN_PUBKEY ?? '3Wyri2aFCDQt9GdTyqahvYzzRkipo7NEign2kGkP5JVm'
+      );
+      const protocolTokenAccount = getAssociatedTokenAddressSync(USDC_MINT, adminPubkey);
+
+      const [validator1StakeAccount] = deriveValidatorStakePda(validationRecord.validator1);
+      const [validator2StakeAccount] = deriveValidatorStakePda(validationRecord.validator2);
+
+      // ── 4. Record on-chain ────────────────────────────────────────────────
       const sig = await program.methods
         .submitValidatorAttestation(assessmentHash, approve)
         .accounts({
           validator: provider.wallet.publicKey,
           bountyAccount: bountyPda,
-          validationRecord,
+          validationRecord: validationRecordPda,
           vault,
-          translatorTokenAccount,
+          validator1TokenAccount,
+          validator2TokenAccount,
+          authorTokenAccount,
+          protocolTokenAccount,
+          validator1StakeAccount,
+          validator2StakeAccount,
           usdcMint: USDC_MINT,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
@@ -244,8 +397,14 @@ export function useValidator() {
 
   return {
     fetchValidationRecord,
+    fetchStakeAccount,
+    stakeUsdc,
+    requestUnstake,
+    completeUnstake,
     registerValidator,
     submitAttestation,
     deriveValidationPda,
+    deriveValidatorStakePda,
+    deriveValidatorStakeVaultPda,
   };
 }

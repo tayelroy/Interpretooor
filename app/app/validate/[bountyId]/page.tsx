@@ -6,10 +6,11 @@ import { useWallets } from '@privy-io/react-auth/solana';
 import { PublicKey } from '@solana/web3.js';
 import {
   ArrowLeft, Loader2, AlertCircle, ShieldCheck,
-  ShieldX, CheckCircle2, Globe,
+  ShieldX, CheckCircle2, Globe, Lock,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useBounty, type BountyAccount } from '@/hooks/useBounty';
-import { useValidator, type ValidationRecord, type TagDecision } from '@/hooks/useValidator';
+import { useValidator, type ValidationRecord, type TagDecision, type ValidatorStakeAccountData } from '@/hooks/useValidator';
 import { parseMdh, type ParsedMdh, type SemanticTag } from '@/lib/mdh-utils';
 import MdhRenderer from '@/app/components/MdhRenderer';
 import { toast } from 'sonner';
@@ -38,7 +39,7 @@ export default function ValidateAssessmentPage() {
   const activeAddress = wallets[0]?.address;
 
   const { fetchBounty } = useBounty();
-  const { fetchValidationRecord, registerValidator, submitAttestation } = useValidator();
+  const { fetchValidationRecord, fetchStakeAccount, registerValidator, submitAttestation } = useValidator();
 
   // ── State ─────────────────────────────────────────────────────────────────
 
@@ -47,12 +48,15 @@ export default function ValidateAssessmentPage() {
   const [originalParsed, setOriginalParsed] = useState<ParsedMdh | null>(null);
   const [translatedParsed, setTranslatedParsed] = useState<ParsedMdh | null>(null);
 
+  const [stakeAccount, setStakeAccount] = useState<ValidatorStakeAccountData | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [registering, setRegistering] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [stakeAcknowledged, setStakeAcknowledged] = useState(false);
 
   // Assessment form state
   const [decisions, setDecisions] = useState<Record<number, { translatedPhrase: string; rationale: string }>>({});
@@ -72,7 +76,14 @@ export default function ValidateAssessmentPage() {
       setBounty(data);
       setRecord(rec);
 
-      if (!('awaitingValidation' in data.status)) {
+      // Fetch validator's stake account if a wallet is connected
+      if (activeAddress) {
+        const stakeAcc = await fetchStakeAccount(new PublicKey(activeAddress)).catch(() => null);
+        setStakeAccount(stakeAcc);
+      }
+
+      const validStatuses = ['awaitingValidation', 'disputed', 'rejected'] as const;
+      if (!validStatuses.some(s => s in data.status)) {
         toast.error('This bounty is not awaiting validation');
         router.replace(`/app/bounty/${bountyId}`);
         return;
@@ -135,6 +146,16 @@ export default function ValidateAssessmentPage() {
 
   const tags: SemanticTag[] = originalParsed?.tags ?? [];
 
+  // Stake requirement derived values
+  const rewardRaw = bounty?.rewardAmount.toNumber() ?? 0;
+  const stakeRequiredRaw = Math.floor(rewardRaw * 1.5);
+  const stakeRequiredUsdc = (stakeRequiredRaw / 1_000_000).toFixed(2);
+  const reward40pctUsdc = (rewardRaw * 0.4 / 1_000_000).toFixed(2);
+  const availableStake = stakeAccount
+    ? stakeAccount.amount.toNumber() - stakeAccount.locked.toNumber() - stakeAccount.unlockAmount.toNumber()
+    : 0;
+  const hasInsufficientStake = availableStake < stakeRequiredRaw;
+
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleRegister = async () => {
@@ -153,6 +174,29 @@ export default function ValidateAssessmentPage() {
 
   const handleSubmit = async () => {
     if (!bounty || !isRegistered || submitting || done || overallVote === null) return;
+
+    // Authenticity gate — block low-effort submissions
+    const TRIVIAL = new Set(['na', 'n/a', 'ok', 'yes', 'no', 'good', 'fine', '-', '.']);
+    for (let idx = 0; idx < tags.length; idx++) {
+      const tag = tags[idx];
+      const d = decisions[idx];
+      const phrase = (d?.translatedPhrase ?? '').trim();
+      const rationale = (d?.rationale ?? '').trim();
+
+      if (!phrase || TRIVIAL.has(phrase.toLowerCase())) {
+        toast.error(`Tag ${idx + 1} (${tag.key}=${tag.value}): provide a real translated phrase`);
+        return;
+      }
+      if (phrase.toLowerCase() === tag.phrase.toLowerCase()) {
+        toast.error(`Tag ${idx + 1} (${tag.key}=${tag.value}): translated phrase must differ from the original`);
+        return;
+      }
+      if (rationale.length < 30 || TRIVIAL.has(rationale.toLowerCase())) {
+        toast.error(`Tag ${idx + 1} (${tag.key}=${tag.value}): write a meaningful assessment (min 30 characters)`);
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
       const tagDecisions: TagDecision[] = tags.map((tag, idx) => ({
@@ -166,6 +210,7 @@ export default function ValidateAssessmentPage() {
       const { assessmentArweaveTxId } = await submitAttestation({
         bountyPda: bounty.publicKey,
         bountyData: bounty,
+        validationRecord: record!,
         tagDecisions,
         approve: overallVote,
       });
@@ -173,8 +218,8 @@ export default function ValidateAssessmentPage() {
       setDone(true);
       toast.success(
         overallVote
-          ? 'Assessment attested on-chain ✓ — if both validators approved, bounty is paid!'
-          : 'Rejection recorded — bounty moved to Disputed',
+          ? 'Assessment attested on-chain — if both validators approved, bounty is paid!'
+          : 'Rejection recorded — if both validators rejected, author is refunded. Otherwise AI oracle resolves.',
         { duration: 6000 }
       );
       console.log('Assessment on Arweave:', assessmentArweaveTxId);
@@ -238,21 +283,56 @@ export default function ValidateAssessmentPage() {
 
         {/* Registration banner */}
         {canRegister && (
-          <div className="mb-6 flex items-center justify-between p-5 bg-violet-50 border border-violet-200 rounded-2xl">
-            <div>
-              <p className="text-sm font-semibold text-violet-800">Register as a Validator</p>
-              <p className="text-xs text-violet-600 mt-0.5">
-                Claim one of {record?.validator1 ? '1 remaining slot' : '2 available slots'} to validate this translation.
-              </p>
+          <div className="mb-6 p-5 bg-violet-50 border border-violet-200 rounded-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-violet-800">Register as a Validator</p>
+                <p className="text-xs text-violet-600 mt-0.5">
+                  Claim one of {record?.validator1 ? '1 remaining slot' : '2 available slots'} to validate this translation.
+                </p>
+                <div className="mt-3 space-y-1 text-xs text-violet-700">
+                  <div className="flex items-center gap-1.5">
+                    <Lock size={11} />
+                    <span>Stake locked: <strong>{stakeRequiredUsdc} USDC</strong> (3-day unstake period)</span>
+                  </div>
+                  <p className="text-emerald-700">If correct majority: earn {reward40pctUsdc} USDC + stake stays</p>
+                  <p className="text-red-600">If wrong minority: lose {stakeRequiredUsdc} USDC stake</p>
+                </div>
+                {hasInsufficientStake && (
+                  <p className="mt-2 text-xs text-red-600 font-medium">
+                    Your stake balance is too low ({(availableStake / 1_000_000).toFixed(2)} USDC available).{' '}
+                    <Link href="/app/stake" className="underline">Add stake →</Link>
+                  </p>
+                )}
+                <label className="flex items-center gap-2 mt-3 text-xs text-violet-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={stakeAcknowledged}
+                    onChange={e => setStakeAcknowledged(e.target.checked)}
+                    className="rounded"
+                  />
+                  I understand I risk losing my stake if I vote in the minority
+                </label>
+              </div>
+              <button
+                onClick={handleRegister}
+                disabled={registering || !stakeAcknowledged || hasInsufficientStake}
+                className="flex items-center gap-2 px-5 py-2.5 bg-violet-700 text-white rounded-xl text-sm font-semibold hover:bg-violet-800 transition-colors disabled:opacity-60 shrink-0 self-start mt-1"
+              >
+                {registering ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+                {registering ? 'Registering…' : 'Register & Lock Stake'}
+              </button>
             </div>
-            <button
-              onClick={handleRegister}
-              disabled={registering}
-              className="flex items-center gap-2 px-5 py-2.5 bg-violet-700 text-white rounded-xl text-sm font-semibold hover:bg-violet-800 transition-colors disabled:opacity-60"
-            >
-              {registering ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
-              {registering ? 'Registering…' : 'Register'}
-            </button>
+          </div>
+        )}
+
+        {/* Rejected by both validators */}
+        {bounty && 'rejected' in bounty.status && (
+          <div className="mb-6 flex items-center gap-3 p-5 bg-amber-50 border border-amber-200 rounded-2xl text-amber-700">
+            <ShieldX size={18} className="shrink-0" />
+            <span className="text-sm font-medium">
+              Both validators rejected this translation. The AI will re-generate and re-submit.
+            </span>
           </div>
         )}
 
@@ -278,8 +358,8 @@ export default function ValidateAssessmentPage() {
         <div className="flex flex-col xl:flex-row gap-5">
 
           {/* Left: side-by-side original + translation */}
-          <div className="xl:flex-[3] flex flex-col lg:flex-row gap-5">
-            <div className="flex-1 bg-white rounded-[28px] border border-stone-200 p-8 shadow-sm">
+          <div className="xl:flex-[3] flex flex-col lg:flex-row gap-5 max-h-[calc(100vh-120px)] sticky top-6">
+            <div className="flex-1 bg-white rounded-[28px] border border-stone-200 p-8 shadow-sm overflow-y-auto">
               <div className="flex justify-between items-center mb-6 pb-3 border-b border-stone-100">
                 <h3 className="text-lg font-semibold text-ink">Original</h3>
                 <span className="text-xs uppercase tracking-widest text-stone-400 font-bold">Source</span>
@@ -291,7 +371,7 @@ export default function ValidateAssessmentPage() {
               )}
             </div>
 
-            <div className="flex-1 bg-white rounded-[28px] border border-stone-200 p-8 shadow-sm">
+            <div className="flex-1 bg-white rounded-[28px] border border-stone-200 p-8 shadow-sm overflow-y-auto">
               <div className="flex justify-between items-center mb-6 pb-3 border-b border-stone-100">
                 <h3 className="text-lg font-semibold text-ink">Translation</h3>
                 <span className="text-xs uppercase tracking-widest text-stone-400 font-bold">
@@ -306,8 +386,8 @@ export default function ValidateAssessmentPage() {
             </div>
           </div>
 
-          {/* Right: assessment form */}
-          <div className="xl:flex-[2] bg-white rounded-[28px] border border-stone-200 p-8 shadow-sm flex flex-col">
+          {/* Right: assessment form — sticky so vote buttons are always visible */}
+          <div className="xl:flex-[2] bg-white rounded-[28px] border border-stone-200 p-8 shadow-sm flex flex-col sticky top-6 self-start max-h-[calc(100vh-120px)]">
             <div className="pb-4 mb-6 border-b border-stone-100">
               <h3 className="text-lg font-semibold text-ink mb-1">Semantic Assessment</h3>
               <p className="text-xs text-stone-400">

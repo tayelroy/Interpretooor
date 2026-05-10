@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
-import { ShieldCheck, Languages, Coins, Loader2, AlertCircle, Users } from 'lucide-react';
+import { ShieldCheck, Languages, Coins, Loader2, AlertCircle, Users, Lock } from 'lucide-react';
 import { PublicKey } from '@solana/web3.js';
 import { useBounty, type BountyAccount } from '@/hooks/useBounty';
 import { useValidator, type ValidationRecord } from '@/hooks/useValidator';
@@ -150,6 +150,10 @@ export default function ValidatePage() {
                     <div className="flex items-center gap-2 text-sm text-stone-500">
                       <Coins size={13} />
                       <span>${usdcAmount(bounty.rewardAmount)} USDC reward</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-amber-600">
+                      <Lock size={13} />
+                      <span>Stake required: ${(bounty.rewardAmount.toNumber() / 1_000_000 * 1.5).toFixed(2)} USDC</span>
                     </div>
                     <div className={`flex items-center gap-2 text-sm font-medium ${slotColor(record)}`}>
                       <Users size={13} />
