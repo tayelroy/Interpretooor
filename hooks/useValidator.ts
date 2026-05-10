@@ -29,7 +29,7 @@ const BOUNTY_IDL = require('../anchor/target/idl/translation_bounty.json');
 
 const BOUNTY_PROGRAM_ID = new PublicKey(
   process.env.NEXT_PUBLIC_BOUNTY_PROGRAM_ID ??
-    'EZs9aybYZxSdSL8t1fCD2iXcpYHidsYQa44KttCRZFAs'
+    '5kRPV7z2BUQn5rEXAhAPbBdHGU4KAYKo8FXBwmG3ahiP'
 );
 
 const USDC_MINT = new PublicKey(
