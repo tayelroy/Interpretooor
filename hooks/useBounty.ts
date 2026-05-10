@@ -11,6 +11,7 @@ import { useWallets } from '@privy-io/react-auth/solana';
 import * as anchor from '@coral-xyz/anchor';
 import {
   Connection,
+  Keypair,
   PublicKey,
 } from '@solana/web3.js';
 import { createPrivyToSolanaAdapter } from '@/lib/solana/privy-adapter';
@@ -30,7 +31,7 @@ const BOUNTY_IDL = require('../anchor/target/idl/translation_bounty.json');
 
 const BOUNTY_PROGRAM_ID = new PublicKey(
   process.env.NEXT_PUBLIC_BOUNTY_PROGRAM_ID ??
-    'EZs9aybYZxSdSL8t1fCD2iXcpYHidsYQa44KttCRZFAs'
+    '5kRPV7z2BUQn5rEXAhAPbBdHGU4KAYKo8FXBwmG3ahiP'
 );
 
 const USDC_MINT = new PublicKey(
@@ -166,6 +167,23 @@ export function useBounty() {
     },
     []
   );
+
+  // Read-only program instance — no wallet needed, safe to call before login.
+  const buildReadOnlyProgram = useCallback((): anchor.Program => {
+    const connection = new Connection(process.env.NEXT_PUBLIC_HELIUS_RPC_URL!, 'confirmed');
+    const dummyKey = Keypair.generate();
+    // anchor.Wallet is Node-only; satisfy the interface inline for browser reads.
+    const dummy = {
+      publicKey: dummyKey.publicKey,
+      signTransaction: async <T>(tx: T) => tx,
+      signAllTransactions: async <T>(txs: T[]) => txs,
+    };
+    const provider = new anchor.AnchorProvider(connection, dummy as anchor.Wallet, { commitment: 'confirmed' });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const idl = { ...(BOUNTY_IDL as any), address: BOUNTY_PROGRAM_ID.toBase58() };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return new anchor.Program(idl as any, provider) as anchor.Program;
+  }, []);
 
   // ── Sponsor upload via the backend relayer ──────────────────────────────────
 
@@ -515,8 +533,7 @@ export function useBounty() {
   /** Fetch a single BountyAccount by its PDA public key */
   const fetchBounty = useCallback(
     async (bountyPda: PublicKey): Promise<BountyAccount> => {
-      const provider = buildProvider();
-      const program = buildProgram(provider);
+      const program = buildReadOnlyProgram();
       const raw = await // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (program.account as any)['bountyAccount'].fetch(bountyPda);
       const account: BountyAccount = { publicKey: bountyPda, ...(raw as Omit<BountyAccount, 'publicKey'>) };
@@ -525,7 +542,7 @@ export function useBounty() {
       }
       return account;
     },
-    [buildProvider, buildProgram]
+    [buildReadOnlyProgram]
   );
 
   /** Fetch all BountyAccounts, optionally filtered by status */
@@ -533,8 +550,7 @@ export function useBounty() {
     async (
       statusFilter?: 'open' | 'claimed' | 'pendingReview' | 'awaitingValidation' | 'disputed' | 'paid'
     ): Promise<BountyAccount[]> => {
-      const provider = buildProvider();
-      const program = buildProgram(provider);
+      const program = buildReadOnlyProgram();
       const all = await // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (program.account as any)['bountyAccount'].all();
 
@@ -550,7 +566,7 @@ export function useBounty() {
       if (!statusFilter) return valid;
       return valid.filter((b: BountyAccount) => statusFilter in b.status);
     },
-    [buildProvider, buildProgram]
+    [buildReadOnlyProgram]
   );
 
   /**

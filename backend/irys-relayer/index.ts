@@ -78,6 +78,7 @@ app.post('/sponsor-upload', async (req: Request, res: Response) => {
       { name: 'Content-Type', value: 'text/plain' },
       { name: 'Content-Format', value: 'mdh' },
       { name: 'App-Name', value: 'Interpretooor' },
+      { name: 'Program-ID', value: process.env.BOUNTY_PROGRAM_ID ?? '' },
       { name: 'Uploader', value: uploaderAddress },
     ];
 
