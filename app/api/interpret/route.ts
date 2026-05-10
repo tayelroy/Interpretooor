@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
-import { interpretText } from '@/lib/ai/gemini-interpreter';
+import { interpretMdh } from '@/lib/ai/gemini-interpreter';
+import type { ParsedMdh } from '@/lib/mdh-utils';
 
 const API_KEY = process.env.OPENAI_API_KEY;
 
@@ -12,18 +13,18 @@ export async function POST(request: Request) {
     );
   }
 
-  const { text, targetLang } = (await request.json()) as { text?: string; targetLang?: string };
+  const body = (await request.json()) as { parsedMdh?: ParsedMdh; targetLang?: string };
 
-  if (!text) {
+  if (!body.parsedMdh?.plainText) {
     return NextResponse.json(
-      { translatedText: 'Interpretation failed. Please provide text to interpret.', reasoning: [] },
+      { translatedText: 'Interpretation failed. Please provide parsedMdh with content.', reasoning: [] },
       { status: 400 }
     );
   }
 
   try {
     const client = new OpenAI({ apiKey: API_KEY });
-    const result = await interpretText(text, targetLang ?? 'English', client);
+    const result = await interpretMdh(body.parsedMdh, body.targetLang ?? 'English', client);
     return NextResponse.json(result);
   } catch (error) {
     console.error('OpenAI Interpretation Error:', error);
