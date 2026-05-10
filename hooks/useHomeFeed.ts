@@ -98,14 +98,21 @@ export function useHomeFeed() {
       const edges: Array<{ node: { id: string; tags: { name: string; value: string }[] } }> =
         data?.transactions?.edges ?? [];
 
+      // Deduplicate by transaction ID just in case GraphQL returns duplicates
+      const uniqueEdges = Array.from(new Map(edges.map(e => [e.node.id, e])).values());
+
       const gateway = process.env.NEXT_PUBLIC_IRYS_GATEWAY ?? 'https://devnet.irys.xyz';
 
       const enriched = await Promise.all(
-        edges.map(async ({ node }): Promise<HomeFeedPost | null> => {
+        uniqueEdges.map(async ({ node }): Promise<HomeFeedPost | null> => {
           const txId = node.id;
           const uploader = node.tags.find((t) => t.name === 'Uploader')?.value ?? '';
           const timestampTag = node.tags.find((t) => t.name === 'Timestamp')?.value;
           const timestamp = timestampTag ? parseInt(timestampTag, 10) : undefined;
+          
+          // Skip if explicitly tagged as translation
+          const typeTag = node.tags.find((t) => t.name === 'Type')?.value;
+          if (typeTag === 'translation') return null;
 
           let title = '';
           let excerpt = '';
@@ -144,7 +151,19 @@ export function useHomeFeed() {
         })
       );
 
-      setPosts(enriched.filter((p): p is HomeFeedPost => p !== null));
+      const validPosts = enriched.filter((p): p is HomeFeedPost => p !== null);
+
+      // Final deduplication by author + title to catch legacy duplicates (original vs translation)
+      // that look identical on the home feed.
+      const seen = new Set<string>();
+      const deduplicated = validPosts.filter((post) => {
+        const key = `${post.authorFull}:${post.title}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      setPosts(deduplicated);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

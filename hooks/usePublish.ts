@@ -60,6 +60,7 @@ export function usePublish({ authorPubkey, editor, sourceLanguage, title }: UseP
           headers: {
             'Content-Type': 'text/plain',
             'X-Uploader-Address': activeWallet.address,
+            'X-Content-Type': 'article',
           },
           body: mdhContent,
         }
