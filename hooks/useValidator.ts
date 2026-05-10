@@ -23,7 +23,7 @@ import { createPrivyToSolanaAdapter } from '@/lib/solana/privy-adapter';
 import { deriveValidationPda, deriveVaultPda, type BountyAccount } from './useBounty';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const BOUNTY_IDL = require('../anchor/target/idl/translation_bounty.json');
+const BOUNTY_IDL = require('../lib/idl/translation_bounty.json');
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -216,8 +216,9 @@ export function useValidator() {
       const { hash: assessmentHash } = await hashRes.json() as { hash: number[] };
 
       // ── 3. Record on-chain — validator's Solana key signs the tx ─────────
-      const [validationRecord] = deriveValidationPda(bountyPda);
+      const [validationRecordPda] = deriveValidationPda(bountyPda);
       const [vault] = deriveVaultPda(bountyPda);
+
       const translatorTokenAccount = getAssociatedTokenAddressSync(
         USDC_MINT,
         bountyData.translator
@@ -228,7 +229,7 @@ export function useValidator() {
         .accounts({
           validator: provider.wallet.publicKey,
           bountyAccount: bountyPda,
-          validationRecord,
+          validationRecord: validationRecordPda,
           vault,
           translatorTokenAccount,
           usdcMint: USDC_MINT,

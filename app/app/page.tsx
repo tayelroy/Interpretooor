@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useHomeFeed } from '@/hooks/useHomeFeed';
 import { useSidebarData } from '@/hooks/useSidebarData';
 import { useState, useMemo } from 'react';
@@ -57,6 +57,7 @@ export default function HomeFeed() {
   const { posts, loading, error } = useHomeFeed();
   const { topTranslators } = useSidebarData();
   const pathname = usePathname();
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
 
   const upNext = posts.slice(2, 4);
@@ -135,15 +136,18 @@ export default function HomeFeed() {
         )}
 
         {!loading && filteredPosts.map((post) => (
-          <Link key={post.originalTxId} href={`/app/article/${post.originalTxId}`}>
-            <article className="bg-parchment rounded-[32px] p-8 border border-stone-200 shadow-sm flex flex-col gap-4 cursor-pointer hover:shadow-md transition-shadow">
-              {/* Header: author + timestamp */}
-              <div className="flex items-center justify-between">
-                <Link
-                  href={`/app/profile/${post.authorFull ?? post.authorShort}`}
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex items-center gap-3 hover:opacity-80 transition-opacity"
-                >
+          <article
+            key={post.originalTxId}
+            onClick={() => router.push(`/app/article/${post.originalTxId}`)}
+            className="bg-parchment rounded-[32px] p-8 border border-stone-200 shadow-sm flex flex-col gap-4 cursor-pointer hover:shadow-md transition-shadow"
+          >
+            {/* Header: author + timestamp */}
+            <div className="flex items-center justify-between">
+              <Link
+                href={`/app/profile/${post.authorFull ?? post.authorShort}`}
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+              >
                   <div className="w-8 h-8 rounded-full bg-surface-dim flex items-center justify-center text-on-surface font-sans text-sm">
                     {post.authorShort[0].toUpperCase()}
                   </div>
@@ -203,7 +207,6 @@ export default function HomeFeed() {
                 </button>
               </div>
             </article>
-          </Link>
         ))}
       </main>
 

@@ -1,0 +1,9 @@
+node_modules
+.next
+anchor/target
+backend/irys-relayer/node_modules
+backend/irys-relayer/dist
+backend/crank/node_modules
+backend/crank/dist
+/tmp
+*.log

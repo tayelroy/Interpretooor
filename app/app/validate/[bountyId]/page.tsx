@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useWallets } from '@privy-io/react-auth/solana';
 import { PublicKey } from '@solana/web3.js';
@@ -58,6 +58,9 @@ export default function ValidateAssessmentPage() {
   const [decisions, setDecisions] = useState<Record<number, { translatedPhrase: string; rationale: string }>>({});
   const [overallVote, setOverallVote] = useState<boolean | null>(null);
 
+  // Refs for scroll-to-error
+  const cardRefs = useRef<Record<number, HTMLDivElement | null>>({});
+
   // ── Load ──────────────────────────────────────────────────────────────────
 
   const load = useCallback(async () => {
@@ -72,8 +75,11 @@ export default function ValidateAssessmentPage() {
       setBounty(data);
       setRecord(rec);
 
-      if (!('awaitingValidation' in data.status)) {
-        toast.error('This bounty is not awaiting validation');
+      const isDisputed = 'disputed' in data.status;
+      const isAwaitingValidation = 'awaitingValidation' in data.status;
+
+      if (!isAwaitingValidation && !isDisputed) {
+        toast.error('This bounty is not available for validation or review');
         router.replace(`/app/bounty/${bountyId}`);
         return;
       }
@@ -134,6 +140,7 @@ export default function ValidateAssessmentPage() {
     bounty?.translator?.toBase58() !== activeAddress;
 
   const tags: SemanticTag[] = originalParsed?.tags ?? [];
+  const isDisputed = bounty && 'disputed' in bounty.status;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -153,6 +160,32 @@ export default function ValidateAssessmentPage() {
 
   const handleSubmit = async () => {
     if (!bounty || !isRegistered || submitting || done || overallVote === null) return;
+
+    // Authenticity gate — block low-effort submissions
+    const TRIVIAL = new Set(['na', 'n/a', 'ok', 'yes', 'no', 'good', 'fine', '-', '.']);
+    for (let idx = 0; idx < tags.length; idx++) {
+      const tag = tags[idx];
+      const d = decisions[idx];
+      const phrase = (d?.translatedPhrase ?? '').trim();
+      const rationale = (d?.rationale ?? '').trim();
+
+      if (!phrase || TRIVIAL.has(phrase.toLowerCase())) {
+        toast.error(`Tag ${idx + 1} (${tag.key}=${tag.value}): provide a real translated phrase`);
+        cardRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      if (phrase.toLowerCase() === tag.phrase.toLowerCase()) {
+        toast.error(`Tag ${idx + 1} (${tag.key}=${tag.value}): translated phrase must differ from the original`);
+        cardRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      if (rationale.length < 30 || TRIVIAL.has(rationale.toLowerCase())) {
+        toast.error(`Tag ${idx + 1} (${tag.key}=${tag.value}): write a meaningful assessment (min 30 characters)`);
+        cardRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
       const tagDecisions: TagDecision[] = tags.map((tag, idx) => ({
@@ -237,7 +270,7 @@ export default function ValidateAssessmentPage() {
         </div>
 
         {/* Registration banner */}
-        {canRegister && (
+        {canRegister && !isDisputed && (
           <div className="mb-6 flex items-center justify-between p-5 bg-violet-50 border border-violet-200 rounded-2xl">
             <div>
               <p className="text-sm font-semibold text-violet-800">Register as a Validator</p>
@@ -257,10 +290,24 @@ export default function ValidateAssessmentPage() {
         )}
 
         {/* Already attested */}
-        {hasAlreadyAttested && !done && (
+        {hasAlreadyAttested && !done && !isDisputed && (
           <div className="mb-6 flex items-center gap-3 p-5 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-700">
             <CheckCircle2 size={18} className="shrink-0" />
             <span className="text-sm font-medium">You have already submitted your attestation for this bounty.</span>
+          </div>
+        )}
+
+        {/* Disputed Banner */}
+        {isDisputed && (
+          <div className="mb-6 flex items-start gap-4 p-6 bg-red-50 border border-red-200 rounded-[28px] text-red-800">
+            <AlertCircle size={24} className="shrink-0 mt-1" />
+            <div>
+              <p className="font-bold text-lg">Bounty Disputed</p>
+              <p className="text-sm mt-1 text-red-700/80">
+                This translation has been rejected by a validator or author. It is now awaiting final resolution by a platform admin.
+                Original and translated content are shown below for reference.
+              </p>
+            </div>
           </div>
         )}
 
@@ -278,8 +325,8 @@ export default function ValidateAssessmentPage() {
         <div className="flex flex-col xl:flex-row gap-5">
 
           {/* Left: side-by-side original + translation */}
-          <div className="xl:flex-[3] flex flex-col lg:flex-row gap-5">
-            <div className="flex-1 bg-white rounded-[28px] border border-stone-200 p-8 shadow-sm">
+          <div className="xl:flex-[3] flex flex-col lg:flex-row gap-5 max-h-[calc(100vh-120px)] sticky top-6">
+            <div className="flex-1 bg-white rounded-[28px] border border-stone-200 p-8 shadow-sm overflow-y-auto">
               <div className="flex justify-between items-center mb-6 pb-3 border-b border-stone-100">
                 <h3 className="text-lg font-semibold text-ink">Original</h3>
                 <span className="text-xs uppercase tracking-widest text-stone-400 font-bold">Source</span>
@@ -291,7 +338,7 @@ export default function ValidateAssessmentPage() {
               )}
             </div>
 
-            <div className="flex-1 bg-white rounded-[28px] border border-stone-200 p-8 shadow-sm">
+            <div className="flex-1 bg-white rounded-[28px] border border-stone-200 p-8 shadow-sm overflow-y-auto">
               <div className="flex justify-between items-center mb-6 pb-3 border-b border-stone-100">
                 <h3 className="text-lg font-semibold text-ink">Translation</h3>
                 <span className="text-xs uppercase tracking-widest text-stone-400 font-bold">
@@ -306,12 +353,17 @@ export default function ValidateAssessmentPage() {
             </div>
           </div>
 
-          {/* Right: assessment form */}
-          <div className="xl:flex-[2] bg-white rounded-[28px] border border-stone-200 p-8 shadow-sm flex flex-col">
+          {/* Right: assessment form — sticky so vote buttons are always visible */}
+          <div className="xl:flex-[2] bg-white rounded-[28px] border border-stone-200 p-8 shadow-sm flex flex-col sticky top-6 self-start max-h-[calc(100vh-120px)]">
             <div className="pb-4 mb-6 border-b border-stone-100">
-              <h3 className="text-lg font-semibold text-ink mb-1">Semantic Assessment</h3>
+              <h3 className="text-lg font-semibold text-ink mb-1">
+                {isDisputed ? 'Assessment Details' : 'Semantic Assessment'}
+              </h3>
               <p className="text-xs text-stone-400">
-                Evaluate how well the translator handled each semantic-tagged phrase.
+                {isDisputed 
+                  ? 'Review the contested semantic handling below.'
+                  : 'Evaluate how well the translator handled each semantic-tagged phrase.'
+                }
               </p>
             </div>
 
@@ -321,64 +373,89 @@ export default function ValidateAssessmentPage() {
               </p>
             ) : (
               <div className="flex-1 overflow-y-auto space-y-5 pr-1">
-                {tags.map((tag, idx) => (
-                  <div key={idx} className="p-4 rounded-2xl border border-stone-100 bg-stone-50 space-y-3">
-                    {/* Tag badge */}
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs font-mono px-2 py-0.5 rounded-full border ${tagColor(tag.key)}`}>
-                        {tag.key}={tag.value}
-                      </span>
+                {tags.map((tag, idx) => {
+                  const d = decisions[idx];
+                  const phrase = (d?.translatedPhrase ?? '').trim();
+                  const rationale = (d?.rationale ?? '').trim();
+                  const TRIVIAL = new Set(['na', 'n/a', 'ok', 'yes', 'no', 'good', 'fine', '-', '.']);
+                  const isComplete =
+                    phrase &&
+                    !TRIVIAL.has(phrase.toLowerCase()) &&
+                    phrase.toLowerCase() !== tag.phrase.toLowerCase() &&
+                    rationale.length >= 30 &&
+                    !TRIVIAL.has(rationale.toLowerCase());
+
+                  return (
+                    <div
+                      key={idx}
+                      ref={(el) => { cardRefs.current[idx] = el; }}
+                      className={`p-4 rounded-2xl border transition-all space-y-3 ${
+                        isComplete ? 'border-emerald-200 bg-emerald-50/30' : 'border-stone-100 bg-stone-50'
+                      }`}
+                    >
+                      {/* Tag badge */}
+                      <div className="flex items-center justify-between">
+                        <span className={`text-xs font-mono px-2 py-0.5 rounded-full border ${tagColor(tag.key)}`}>
+                          {tag.key}={tag.value}
+                        </span>
+                        {isComplete && <CheckCircle2 size={14} className="text-emerald-600" />}
+                      </div>
+                      {/* Original phrase */}
+                      <div>
+                        <label className="text-xs text-stone-400 uppercase tracking-widest">Original phrase</label>
+                        <p className="text-sm text-ink mt-0.5 italic">&quot;{tag.phrase}&quot;</p>
+                      </div>
+                      {/* Translated phrase */}
+                      <div>
+                        <label className="text-xs text-stone-400 uppercase tracking-widest block mb-1">
+                          Translated phrase
+                        </label>
+                        <input
+                          type="text"
+                          value={decisions[idx]?.translatedPhrase ?? ''}
+                          onChange={(e) =>
+                            setDecisions((prev) => ({
+                              ...prev,
+                              [idx]: { ...prev[idx], translatedPhrase: e.target.value },
+                            }))
+                          }
+                          placeholder="Translated equivalent…"
+                          disabled={!isRegistered || hasAlreadyAttested || done || isDisputed}
+                          className="w-full text-sm px-3 py-2 rounded-xl border border-stone-200 bg-white focus:outline-none focus:border-violet-400 disabled:opacity-50"
+                        />
+                      </div>
+                      {/* Rationale */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs text-stone-400 uppercase tracking-widest">
+                            Your assessment
+                          </label>
+                          <span className={`text-[10px] font-mono ${rationale.length >= 30 ? 'text-emerald-600' : 'text-stone-400'}`}>
+                            {rationale.length}/30
+                          </span>
+                        </div>
+                        <textarea
+                          value={decisions[idx]?.rationale ?? ''}
+                          onChange={(e) =>
+                            setDecisions((prev) => ({
+                              ...prev,
+                              [idx]: { ...prev[idx], rationale: e.target.value },
+                            }))
+                          }
+                          placeholder="Does this translation preserve the semantic intent? Note any issues…"
+                          rows={2}
+                          disabled={!isRegistered || hasAlreadyAttested || done || isDisputed}
+                          className="w-full text-sm px-3 py-2 rounded-xl border border-stone-200 bg-white focus:outline-none focus:border-violet-400 resize-none disabled:opacity-50"
+                        />
+                      </div>
                     </div>
-                    {/* Original phrase */}
-                    <div>
-                      <label className="text-xs text-stone-400 uppercase tracking-widest">Original phrase</label>
-                      <p className="text-sm text-ink mt-0.5 italic">"{tag.phrase}"</p>
-                    </div>
-                    {/* Translated phrase */}
-                    <div>
-                      <label className="text-xs text-stone-400 uppercase tracking-widest block mb-1">
-                        Translated phrase
-                      </label>
-                      <input
-                        type="text"
-                        value={decisions[idx]?.translatedPhrase ?? ''}
-                        onChange={(e) =>
-                          setDecisions((prev) => ({
-                            ...prev,
-                            [idx]: { ...prev[idx], translatedPhrase: e.target.value },
-                          }))
-                        }
-                        placeholder="Translated equivalent…"
-                        disabled={!isRegistered || hasAlreadyAttested || done}
-                        className="w-full text-sm px-3 py-2 rounded-xl border border-stone-200 bg-white focus:outline-none focus:border-violet-400 disabled:opacity-50"
-                      />
-                    </div>
-                    {/* Rationale */}
-                    <div>
-                      <label className="text-xs text-stone-400 uppercase tracking-widest block mb-1">
-                        Your assessment
-                      </label>
-                      <textarea
-                        value={decisions[idx]?.rationale ?? ''}
-                        onChange={(e) =>
-                          setDecisions((prev) => ({
-                            ...prev,
-                            [idx]: { ...prev[idx], rationale: e.target.value },
-                          }))
-                        }
-                        placeholder="Does this translation preserve the semantic intent? Note any issues…"
-                        rows={2}
-                        disabled={!isRegistered || hasAlreadyAttested || done}
-                        className="w-full text-sm px-3 py-2 rounded-xl border border-stone-200 bg-white focus:outline-none focus:border-violet-400 resize-none disabled:opacity-50"
-                      />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
             {/* Overall vote */}
-            {isRegistered && !hasAlreadyAttested && !done && (
+            {isRegistered && !hasAlreadyAttested && !done && !isDisputed && (
               <div className="mt-6 pt-5 border-t border-stone-100 space-y-4">
                 <p className="text-sm font-semibold text-ink">Overall verdict</p>
                 <div className="flex gap-3">

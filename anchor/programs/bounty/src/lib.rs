@@ -202,29 +202,8 @@ pub mod translation_bounty {
             let consensus = approve && other_vote;
 
             if consensus {
-                let bounty_seeds: &[&[u8]] = &[
-                    b"bounty",
-                    author_key.as_ref(),
-                    &nonce_bytes,
-                    &[bump],
-                ];
-                let signer_seeds: &[&[&[u8]]] = &[bounty_seeds];
-
-                token::transfer(
-                    CpiContext::new_with_signer(
-                        ctx.accounts.token_program.to_account_info(),
-                        SplTransfer {
-                            from: ctx.accounts.vault.to_account_info(),
-                            to: ctx.accounts.translator_token_account.to_account_info(),
-                            authority: ctx.accounts.bounty_account.to_account_info(),
-                        },
-                        signer_seeds,
-                    ),
-                    reward_amount,
-                )?;
-
                 ctx.accounts.bounty_account.status = BountyStatus::Paid;
-                msg!("Consensus: both approved. Bounty paid. Amount: {}", reward_amount);
+                msg!("Consensus: approved. Status set to Paid.");
             } else {
                 ctx.accounts.bounty_account.status = BountyStatus::Disputed;
                 msg!("Consensus: rejected. Status set to Disputed.");
