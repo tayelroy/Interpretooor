@@ -1,13 +1,13 @@
-import { GoogleGenAI } from '@google/genai';
+import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
 import { interpretText } from '@/lib/ai/gemini-interpreter';
 
-const API_KEY = process.env.GEMINI_API_KEY;
+const API_KEY = process.env.OPENAI_API_KEY;
 
 export async function POST(request: Request) {
   if (!API_KEY) {
     return NextResponse.json(
-      { translatedText: 'Interpretation failed. GEMINI_API_KEY is not defined.', reasoning: [] },
+      { translatedText: 'Interpretation failed. OPENAI_API_KEY is not defined.', reasoning: [] },
       { status: 500 }
     );
   }
@@ -22,10 +22,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await interpretText(text, targetLang ?? 'English', new GoogleGenAI({ apiKey: API_KEY }));
+    const client = new OpenAI({ apiKey: API_KEY });
+    const result = await interpretText(text, targetLang ?? 'English', client);
     return NextResponse.json(result);
   } catch (error) {
-    console.error('Gemini Interpretation Error:', error);
+    console.error('OpenAI Interpretation Error:', error);
     return NextResponse.json(
       { translatedText: 'Interpretation failed. Please check connection and try again.', reasoning: [] },
       { status: 500 }

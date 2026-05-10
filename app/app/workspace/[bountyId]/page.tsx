@@ -90,8 +90,8 @@ export default function WorkspacePage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.mdh')) {
-      setImportError('Please upload a .mdh file');
+    if (!file.name.endsWith('.mdh') && !file.name.endsWith('.md')) {
+      setImportError('Please upload a .mdh or .md file');
       return;
     }
 
@@ -256,7 +256,7 @@ export default function WorkspacePage() {
                               <li key={i} className="text-xs text-stone-500 bg-white rounded-lg px-3 py-2 border border-violet-100">
                                 <span className="font-mono text-violet-600">{r.tagKey}={r.tagValue}</span>
                                 {' · '}
-                                <span className="italic">"{r.phrase}"</span>
+                                <span className="italic">&quot;{r.phrase}&quot;</span>
                                 {r.explanation && <> — {r.explanation}</>}
                               </li>
                             ))}
@@ -274,7 +274,7 @@ export default function WorkspacePage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".mdh"
+                accept=".mdh,.md"
                 onChange={handleFileImport}
                 className="hidden"
                 id="mdh-import"
@@ -284,7 +284,7 @@ export default function WorkspacePage() {
                 className="flex items-center gap-2 px-5 py-3 bg-stone-100 text-stone-700 rounded-xl text-sm font-medium hover:bg-stone-200 transition-colors cursor-pointer w-fit"
               >
                 <Upload size={14} />
-                Import Translated .mdh
+                Import Translated .mdh / .md
               </label>
 
               {importError && (
@@ -300,8 +300,8 @@ export default function WorkspacePage() {
               {translatedParsed ? (
                 <MdhRenderer parsedMdh={translatedParsed} />
               ) : (
-                <div className="flex items-center justify-center h-full text-stone-300 text-sm">
-                  Import a .mdh file to preview your translation here
+                <div className="flex items-center justify-center h-full text-stone-300 text-sm text-center px-8">
+                  Import a .mdh or .md file to preview your translation here
                 </div>
               )}
             </div>

@@ -1,12 +1,13 @@
 "use client";
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useHomeFeed } from '@/hooks/useHomeFeed';
+import { useSidebarData } from '@/hooks/useSidebarData';
 import { useState, useMemo } from 'react';
 import {
   AlertCircle, Clock, Languages,
-  Home, Inbox, MessageSquare, Bell, Compass, LayoutDashboard, User,
-  Bookmark, Search,
+  Home, Bookmark, Search, Compass, LayoutDashboard, User,
 } from 'lucide-react';
 
 const TAG_KEY_COLORS: Record<string, string> = {
@@ -26,24 +27,11 @@ function formatTimestamp(ts: number): string {
   return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-const upNext = [
-  { title: "Satoshi's Literary Style: A Linguistic Analysis", author: 'The Archivist' },
-  { title: 'Smart Contracts as Poetry: Translating Code to Stanza', author: 'Maria Chen' },
-];
-
-const recommendedTranslators = [
-  { initial: 'K', name: 'Kenji Sato', specialty: 'JP to EN Specialist' },
-  { initial: 'L', name: 'Lumière Nodes', specialty: 'FR Academic' },
-];
-
 const sidebarNavItems = [
-  { Icon: Home,            label: 'Home',          href: '/app',              active: true  },
-  { Icon: Inbox,           label: 'Subscriptions', href: '/app/subscriptions',active: false },
-  { Icon: MessageSquare,   label: 'Chat',          href: '/app/chat',         active: false },
-  { Icon: Bell,            label: 'Activity',      href: '/app/activity',     active: false },
-  { Icon: Compass,         label: 'Explore',       href: '/app/explore',      active: false },
-  { Icon: LayoutDashboard, label: 'Dashboard',     href: '/app/dashboard',    active: false },
-  { Icon: User,            label: 'Profile',       href: '/app/profile',      active: false },
+  { Icon: Home,            label: 'Home',      href: '/app' },
+  { Icon: Compass,         label: 'Explore',   href: '/app/explore' },
+  { Icon: LayoutDashboard, label: 'Dashboard', href: '/app/dashboard' },
+  { Icon: User,            label: 'Profile',   href: '/app/profile' },
 ];
 
 function PostSkeleton() {
@@ -67,7 +55,11 @@ function PostSkeleton() {
 
 export default function HomeFeed() {
   const { posts, loading, error } = useHomeFeed();
+  const { topTranslators } = useSidebarData();
+  const pathname = usePathname();
   const [searchQuery, setSearchQuery] = useState('');
+
+  const upNext = posts.slice(2, 4);
 
   const filteredPosts = useMemo(() => {
     if (!searchQuery.trim()) return posts;
@@ -85,20 +77,23 @@ export default function HomeFeed() {
       {/* Left Sidebar */}
       <aside className="hidden lg:flex w-56 flex-col gap-8 sticky top-[100px]">
         <nav className="flex flex-col gap-1">
-          {sidebarNavItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 px-4 py-2 rounded-lg font-sans text-[16px] transition-colors ${
-                item.active
-                  ? 'bg-surface-container text-on-surface font-medium'
-                  : 'hover:bg-surface-container text-on-surface-variant'
-              }`}
-            >
-              <item.Icon size={20} strokeWidth={item.active ? 2.5 : 1.75} />
-              {item.label}
-            </Link>
-          ))}
+          {sidebarNavItems.map((item) => {
+            const active = pathname === item.href || (item.href !== '/app' && pathname.startsWith(item.href));
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center gap-3 px-4 py-2 rounded-lg font-sans text-[16px] transition-colors ${
+                  active
+                    ? 'bg-surface-container text-on-surface font-medium'
+                    : 'hover:bg-surface-container text-on-surface-variant'
+                }`}
+              >
+                <item.Icon size={20} strokeWidth={active ? 2.5 : 1.75} />
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
         <Link
           href="/app/write"
@@ -144,14 +139,18 @@ export default function HomeFeed() {
             <article className="bg-parchment rounded-[32px] p-8 border border-stone-200 shadow-sm flex flex-col gap-4 cursor-pointer hover:shadow-md transition-shadow">
               {/* Header: author + timestamp */}
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+                <Link
+                  href={`/app/profile/${post.authorFull ?? post.authorShort}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+                >
                   <div className="w-8 h-8 rounded-full bg-surface-dim flex items-center justify-center text-on-surface font-sans text-sm">
                     {post.authorShort[0].toUpperCase()}
                   </div>
                   <span className="font-sans text-sm font-medium text-on-surface font-mono">
                     {post.authorShort}…
                   </span>
-                </div>
+                </Link>
                 {post.timestamp && (
                   <span className="font-sans text-xs text-stone-400">
                     {formatTimestamp(post.timestamp)}
@@ -223,46 +222,51 @@ export default function HomeFeed() {
         </div>
 
         {/* Up Next */}
-        <div className="flex flex-col gap-4">
-          <h3 className="font-sans not-italic text-[20px] font-medium text-on-surface pb-2 border-b border-stone-200">
-            Up Next
-          </h3>
-          <div className="flex flex-col gap-3">
-            {upNext.map((item) => (
-              <a key={item.title} href="#" className="group flex flex-col gap-0.5">
-                <span className="font-sans text-sm text-on-surface-variant group-hover:text-on-surface transition-colors">
-                  {item.title}
-                </span>
-                <span className="font-sans text-sm text-surface-tint">by {item.author}</span>
-              </a>
-            ))}
+        {upNext.length > 0 && (
+          <div className="flex flex-col gap-4">
+            <h3 className="font-sans not-italic text-[20px] font-medium text-on-surface pb-2 border-b border-stone-200">
+              Up Next
+            </h3>
+            <div className="flex flex-col gap-3">
+              {upNext.map((post) => (
+                <Link key={post.originalTxId} href={`/app/article/${post.originalTxId}`} className="group flex flex-col gap-0.5">
+                  <span className="font-sans text-sm text-on-surface-variant group-hover:text-on-surface transition-colors line-clamp-2">
+                    {post.title}
+                  </span>
+                  <span className="font-sans text-xs text-surface-tint font-mono">{post.authorShort}…</span>
+                </Link>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Recommended Translators */}
-        <div className="flex flex-col gap-4">
-          <h3 className="font-sans not-italic text-[20px] font-medium text-on-surface pb-2 border-b border-stone-200">
-            Recommended Translators
-          </h3>
+        {topTranslators.length > 0 && (
           <div className="flex flex-col gap-4">
-            {recommendedTranslators.map((translator) => (
-              <div key={translator.name} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-surface-dim flex items-center justify-center text-on-surface font-sans text-sm">
-                    {translator.initial}
+            <h3 className="font-sans not-italic text-[20px] font-medium text-on-surface pb-2 border-b border-stone-200">
+              Top Translators
+            </h3>
+            <div className="flex flex-col gap-4">
+              {topTranslators.map((t) => (
+                <Link key={t.address} href={`/app/profile/${t.address}`} className="flex items-center justify-between group">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-surface-dim flex items-center justify-center text-on-surface font-sans text-sm">
+                      {t.address.slice(0, 1).toUpperCase()}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-sans text-sm font-medium text-on-surface font-mono group-hover:text-violet-700 transition-colors">
+                        {t.short}
+                      </span>
+                      <span className="font-sans text-xs text-surface-tint">
+                        {t.completedCount} job{t.completedCount !== 1 ? 's' : ''} · {t.languages.slice(0, 2).join(', ')}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex flex-col">
-                    <span className="font-sans text-sm font-medium text-on-surface">{translator.name}</span>
-                    <span className="font-sans text-sm text-surface-tint">{translator.specialty}</span>
-                  </div>
-                </div>
-                <button className="bg-surface-container text-on-surface rounded-full px-3 py-1 font-sans text-xs hover:bg-stone-200 transition-colors">
-                  Subscribe
-                </button>
-              </div>
-            ))}
+                </Link>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </aside>
     </div>
   );

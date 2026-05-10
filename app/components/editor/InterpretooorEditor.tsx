@@ -15,6 +15,7 @@ import { HeadingNode, QuoteNode } from '@lexical/rich-text';
 import { CodeNode } from '@lexical/code';
 import { ListNode, ListItemNode } from '@lexical/list';
 import { LinkNode } from '@lexical/link';
+import { ImageNode } from './ImageNode';
 import type { LexicalEditor } from 'lexical';
 import {
   $createParagraphNode,
@@ -24,7 +25,7 @@ import {
 } from 'lexical';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Download } from 'lucide-react';
 import StaticToolbarPlugin from './StaticToolbarPlugin';
 import FloatingSemanticToolbar from './FloatingSemanticToolbar';
 import SemanticTooltipPlugin from './SemanticTooltipPlugin';
@@ -32,6 +33,8 @@ import { SemanticNode } from './SemanticNode';
 import { useWallets } from '@privy-io/react-auth/solana';
 import { usePublish } from '@/hooks/usePublish';
 import { useDraftPersistence } from '@/hooks/useDraftPersistence';
+import { exportToMdh } from '@/lib/mdh-utils';
+import { serialiseLexicalToMdh } from '@/lib/mdh-lexical-bridge';
 
 function emptyEditorState() {
   $getRoot().clear();
@@ -170,6 +173,13 @@ export default function InterpretooorEditor() {
     title,
   });
 
+  const handleExportLocal = () => {
+    if (!editor) return;
+    const mdh = serialiseLexicalToMdh(editor);
+    const filename = title || 'untitled-draft';
+    exportToMdh(mdh, filename);
+  };
+
   const onPublishClick = async () => {
     console.log('🟢 1. onPublishClick triggered!');
 
@@ -211,7 +221,7 @@ export default function InterpretooorEditor() {
     () => ({
       editorState: draft.content ? JSON.stringify(draft.content) : emptyEditorState,
       namespace: 'InterpretooorEditor',
-      nodes: [SemanticNode, HorizontalRuleNode, HeadingNode, QuoteNode, ListNode, ListItemNode, CodeNode, LinkNode],
+      nodes: [SemanticNode, HorizontalRuleNode, HeadingNode, QuoteNode, ListNode, ListItemNode, CodeNode, LinkNode, ImageNode],
       onError(error) {
         throw error;
       },
@@ -315,6 +325,16 @@ export default function InterpretooorEditor() {
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleExportLocal}
+              disabled={!editor}
+              className="flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+              title="Export as .mdh"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Export</span>
+            </button>
             <button
               type="button"
               onClick={() => setIsPreview((current) => !current)}

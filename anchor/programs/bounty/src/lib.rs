@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer as SplTransfer};
 
-declare_id!("EZs9aybYZxSdSL8t1fCD2iXcpYHidsYQa44KttCRZFAs");
+declare_id!("5kRPV7z2BUQn5rEXAhAPbBdHGU4KAYKo8FXBwmG3ahiP");
 
 const REVIEW_WINDOW_SECS: i64 = 48 * 60 * 60;
 

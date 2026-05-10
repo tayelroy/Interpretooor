@@ -9,6 +9,7 @@ export interface HomeFeedPost {
   assetId: string;
   originalTxId: string;
   authorShort: string;
+  authorFull: string;
   title: string;
   excerpt: string;
   readingTime: number;
@@ -20,12 +21,16 @@ export interface HomeFeedPost {
 const ARWEAVE_GRAPHQL =
   (process.env.NEXT_PUBLIC_IRYS_GATEWAY ?? 'https://devnet.irys.xyz') + '/graphql';
 
+const PROGRAM_ID =
+  process.env.NEXT_PUBLIC_BOUNTY_PROGRAM_ID ?? '5kRPV7z2BUQn5rEXAhAPbBdHGU4KAYKo8FXBwmG3ahiP';
+
 const FEED_QUERY = `
-  query InterpretooorFeed($first: Int!) {
+  query InterpretooorFeed($first: Int!, $programId: String!) {
     transactions(
       tags: [
         { name: "App-Name",       values: ["Interpretooor"] }
         { name: "Content-Format", values: ["mdh"] }
+        { name: "Program-ID",     values: [$programId] }
       ]
       first: $first
       order: DESC
@@ -83,7 +88,7 @@ export function useHomeFeed() {
       const gqlRes = await fetch(ARWEAVE_GRAPHQL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: FEED_QUERY, variables: { first: 50 } }),
+        body: JSON.stringify({ query: FEED_QUERY, variables: { first: 50, programId: PROGRAM_ID } }),
       });
 
       if (!gqlRes.ok) throw new Error(`Arweave GraphQL error: ${gqlRes.status}`);
@@ -128,6 +133,7 @@ export function useHomeFeed() {
             assetId: txId,
             originalTxId: txId,
             authorShort: uploader.slice(0, 8),
+            authorFull: uploader,
             title,
             excerpt,
             readingTime,

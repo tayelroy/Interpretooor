@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { TOGGLE_LINK_COMMAND } from '@lexical/link';
 import {
   $getSelection,
+  $insertNodes,
   $isRangeSelection,
   FORMAT_TEXT_COMMAND,
   REDO_COMMAND,
@@ -14,6 +15,7 @@ import { INSERT_ORDERED_LIST_COMMAND, INSERT_UNORDERED_LIST_COMMAND } from '@lex
 import { $createQuoteNode, $createHeadingNode, type HeadingTagType } from '@lexical/rich-text';
 import { $setBlocksType } from '@lexical/selection';
 import { INSERT_HORIZONTAL_RULE_COMMAND } from '@lexical/react/LexicalHorizontalRuleNode';
+import { $createImageNode } from './ImageNode';
 
 type ToolbarButtonProps = {
   label: string;
@@ -44,8 +46,22 @@ function Icon({ children }: { children: React.ReactNode }) {
   return <span className="inline-flex h-4 w-4 items-center justify-center">{children}</span>;
 }
 
+function Spinner() {
+  return (
+    <svg
+      className="animate-spin h-4 w-4 text-gray-500"
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.5" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z" />
+    </svg>
+  );
+}
+
 export default function StaticToolbarPlugin() {
   const [editor] = useLexicalComposerContext();
+  const [isUploading, setIsUploading] = useState(false);
 
   const buttons = useMemo(
     () => [
@@ -252,19 +268,23 @@ export default function StaticToolbarPlugin() {
             </Icon>
           }
         />
-        <ToolbarButton
-          label="Image"
+        <button
+          type="button"
+          disabled={isUploading}
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
+            if (isUploading) return;
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = 'image/*';
             input.onchange = async (e) => {
               const file = (e.target as HTMLInputElement).files?.[0];
               if (!file) return;
-              
+
               const formData = new FormData();
               formData.append('file', file);
-              
+
+              setIsUploading(true);
               try {
                 const res = await fetch('/api/upload-image', {
                   method: 'POST',
@@ -272,17 +292,27 @@ export default function StaticToolbarPlugin() {
                 });
                 const data = await res.json();
                 if (data.url) {
-                  // TODO: image upload — requires custom ImageNode
-                  console.log(`Image uploaded to ${data.url}`);
-                  alert('Image upload requires custom ImageNode');
+                  editor.update(() => {
+                    $insertNodes([$createImageNode(data.url, file.name)]);
+                  });
+                } else {
+                  console.error('[upload-image] Error:', data.error);
                 }
               } catch (err) {
-                console.error(err);
+                console.error('[upload-image]', err);
+              } finally {
+                setIsUploading(false);
               }
             };
             input.click();
           }}
-          icon={
+          className="inline-flex h-8 items-center justify-center rounded-md px-2.5 text-gray-700 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label="Image"
+          title="Image"
+        >
+          {isUploading ? (
+            <Spinner />
+          ) : (
             <Icon>
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="2" y="3" width="12" height="10" rx="2" ry="2"/>
@@ -290,8 +320,8 @@ export default function StaticToolbarPlugin() {
                 <path d="M2 10l3.5-3.5 6.5 6.5"/>
               </svg>
             </Icon>
-          }
-        />
+          )}
+        </button>
       </div>
     </div>
   );

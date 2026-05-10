@@ -24,7 +24,7 @@ import 'dotenv/config';
 // ─── Config ─────────────────────────────────────────────────────────────────
 
 const PROGRAM_ID = new PublicKey(
-  process.env.BOUNTY_PROGRAM_ID ?? 'EZs9aybYZxSdSL8t1fCD2iXcpYHidsYQa44KttCRZFAs'
+  process.env.BOUNTY_PROGRAM_ID ?? '5kRPV7z2BUQn5rEXAhAPbBdHGU4KAYKo8FXBwmG3ahiP'
 );
 const USDC_MINT = new PublicKey(
   // Devnet USDC mint (Circle's official devnet USDC)

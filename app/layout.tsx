@@ -22,9 +22,9 @@ export const metadata: Metadata = {
   description:
     "A verifiable, nuance-aware protocol for culturally accurate global content interpretation powered by Gemini.",
   icons: {
-    icon: "/icon.svg",
-    shortcut: "/icon.svg",
-    apple: "/icon.svg",
+    icon: "/icon.png",
+    shortcut: "/icon.png",
+    apple: "/icon.png",
   },
 };
 
