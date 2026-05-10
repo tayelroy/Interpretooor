@@ -1,32 +1,52 @@
 import OpenAI from 'openai';
+import type { ParsedMdh } from '@/lib/mdh-utils';
+
+export interface ReasoningItem {
+  tagKey: string;
+  tagValue: string;
+  phrase: string;
+  explanation: string;
+}
 
 export interface InterpretationResult {
   translatedText: string;
-  reasoning: {
-    tag: string;
-    source: string;
-    concept?: string;
-    decision: string;
-  }[];
+  reasoning: ReasoningItem[];
 }
 
-export async function interpretText(
-  text: string,
+function buildSemanticContext(parsed: ParsedMdh): string {
+  if (parsed.tags.length === 0) return '';
+  const lines = parsed.tags.map(
+    (t) => `- "${t.phrase}" → ${t.key}=${t.value}`
+  );
+  return `\nPhrase-level semantic context:\n${lines.join('\n')}\n`;
+}
+
+export async function interpretMdh(
+  parsed: ParsedMdh,
   targetLang: string,
   client: OpenAI
 ): Promise<InterpretationResult> {
+  const semanticContext = buildSemanticContext(parsed);
+
+  const systemPrompt = [
+    'You are a cultural translation expert.',
+    'Translate with semantic accuracy, preserving cultural nuances and idiomatic expressions.',
+    'When translating annotated phrases, respect their semantic tags — never translate a sarcastic tone as genuinely positive, never translate idioms literally, preserve persuasive intent.',
+  ].join(' ');
+
+  const userPrompt = [
+    `Translate the following text into ${targetLang}.`,
+    semanticContext,
+    `Source text:\n${parsed.plainText}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
   const response = await client.chat.completions.create({
-    model: 'gpt-5.4-mini',
+    model: 'gpt-4o-mini',
     messages: [
-      {
-        role: 'system',
-        content:
-          'You are a cultural translation expert. Interpret text with semantic accuracy, preserving cultural nuances and idiomatic expressions. Identify specific phrases that require interpretation rather than literal translation.',
-      },
-      {
-        role: 'user',
-        content: `Interpret the following text into ${targetLang}.\n\nOriginal Text: "${text}"`,
-      },
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
     ],
     response_format: {
       type: 'json_schema',
@@ -43,13 +63,13 @@ export async function interpretText(
               type: 'array',
               items: {
                 type: 'object',
-                required: ['tag', 'source', 'concept', 'decision'],
+                required: ['tagKey', 'tagValue', 'phrase', 'explanation'],
                 additionalProperties: false,
                 properties: {
-                  tag: { type: 'string' },
-                  source: { type: 'string' },
-                  concept: { type: ['string', 'null'] },
-                  decision: { type: 'string' },
+                  tagKey:      { type: 'string' },
+                  tagValue:    { type: 'string' },
+                  phrase:      { type: 'string' },
+                  explanation: { type: 'string' },
                 },
               },
             },
@@ -59,7 +79,7 @@ export async function interpretText(
     },
   });
 
-  const resultString = response.choices[0]?.message?.content;
-  if (!resultString) throw new Error('Empty response from AI');
-  return JSON.parse(resultString) as InterpretationResult;
+  const raw = response.choices[0]?.message?.content;
+  if (!raw) throw new Error('Empty response from AI');
+  return JSON.parse(raw) as InterpretationResult;
 }
