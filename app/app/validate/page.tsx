@@ -96,7 +96,7 @@ export default function ValidatePage() {
           </div>
           <p className="text-stone-500 text-sm max-w-xl">
             Earn rewards by validating translation quality. Review the semantic-tagged phrases,
-            assess cultural accuracy, and attest your verdict on-chain via Sign Protocol.
+            assess cultural accuracy, and attest your verdict on-chain.
           </p>
         </div>
 

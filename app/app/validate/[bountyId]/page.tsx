@@ -269,7 +269,7 @@ export default function ValidateAssessmentPage() {
           <div className="mb-6 flex items-center gap-3 p-5 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-700">
             <CheckCircle2 size={18} className="shrink-0" />
             <span className="text-sm font-medium">
-              Attestation submitted on-chain via Sign Protocol. Thank you!
+              Attestation submitted on-chain. Thank you!
             </span>
           </div>
         )}
@@ -418,7 +418,7 @@ export default function ValidateAssessmentPage() {
                   )}
                 </button>
                 <p className="text-xs text-stone-400 text-center">
-                  Your assessment will be uploaded to Arweave and attested via Sign Protocol.
+                  Your assessment will be uploaded to Arweave and recorded on-chain.
                 </p>
               </div>
             )}
