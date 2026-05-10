@@ -48,7 +48,8 @@ export type BountyStatus =
   | { pendingReview: Record<string, never> }
   | { awaitingValidation: Record<string, never> }
   | { disputed: Record<string, never> }
-  | { paid: Record<string, never> };
+  | { paid: Record<string, never> }
+  | { rejected: Record<string, never> };
 
 export interface BountyAccount {
   publicKey: PublicKey;
@@ -105,6 +106,20 @@ export function deriveValidationPda(bountyAccount: PublicKey): [PublicKey, numbe
   );
 }
 
+export function deriveValidatorStakePda(validator: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from('validator_stake'), validator.toBuffer()],
+    BOUNTY_PROGRAM_ID
+  );
+}
+
+export function deriveValidatorStakeVaultPda(validator: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from('validator_stake_vault'), validator.toBuffer()],
+    BOUNTY_PROGRAM_ID
+  );
+}
+
 // ─── Validation ──────────────────────────────────────────────────────────────
 
 function isValidBountyAccount(b: BountyAccount): boolean {
@@ -122,7 +137,8 @@ function isValidBountyAccount(b: BountyAccount): boolean {
       'pendingReview' in b.status ||
       'awaitingValidation' in b.status ||
       'disputed' in b.status ||
-      'paid' in b.status
+      'paid' in b.status ||
+      'rejected' in b.status
     )
   );
 }
@@ -442,34 +458,44 @@ export function useBounty() {
     async (params: {
       bountyPda: PublicKey;
       bountyData: BountyAccount;
-      payTranslator: boolean;
+      approve: boolean;
+      correctValidatorPubkey: PublicKey;
+      incorrectValidatorPubkey: PublicKey;
     }): Promise<string> => {
-      const { bountyPda, bountyData, payTranslator } = params;
+      const { bountyPda, bountyData, approve, correctValidatorPubkey, incorrectValidatorPubkey } = params;
       const provider = buildProvider();
       const program = buildProgram(provider);
 
-      if (!bountyData.translator) {
-        throw new Error('Cannot resolve: bounty has no translator');
-      }
-
       const [vault] = deriveVaultPda(bountyPda);
-      const translatorTokenAccount = getAssociatedTokenAddressSync(
+      const [validationRecord] = deriveValidationPda(bountyPda);
+      const [correctValidatorStakeAcc] = deriveValidatorStakePda(correctValidatorPubkey);
+      const [incorrectValidatorStakeAcc] = deriveValidatorStakePda(incorrectValidatorPubkey);
+      const [incorrectValidatorStakeVault] = deriveValidatorStakeVaultPda(incorrectValidatorPubkey);
+
+      const correctValidatorTokenAccount = getAssociatedTokenAddressSync(
         USDC_MINT,
-        bountyData.translator
+        correctValidatorPubkey
       );
-      const authorTokenAccount = getAssociatedTokenAddressSync(
-        USDC_MINT,
-        bountyData.author
+      const authorTokenAccount = getAssociatedTokenAddressSync(USDC_MINT, bountyData.author);
+
+      const adminPubkey = new PublicKey(
+        process.env.NEXT_PUBLIC_ADMIN_PUBKEY ?? '3Wyri2aFCDQt9GdTyqahvYzzRkipo7NEign2kGkP5JVm'
       );
+      const protocolTokenAccount = getAssociatedTokenAddressSync(USDC_MINT, adminPubkey);
 
       const sig = await program.methods
-        .resolveDispute(payTranslator)
+        .resolveDispute(approve)
         .accounts({
           admin: provider.wallet.publicKey,
           bountyAccount: bountyPda,
+          validationRecord,
           vault,
-          translatorTokenAccount,
+          correctValidatorStakeAcc,
+          incorrectValidatorStakeAcc,
+          incorrectValidatorStakeVault,
+          correctValidatorTokenAccount,
           authorTokenAccount,
+          protocolTokenAccount,
           usdcMint: USDC_MINT,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
@@ -547,7 +573,7 @@ export function useBounty() {
   /** Fetch all BountyAccounts, optionally filtered by status */
   const fetchAllBounties = useCallback(
     async (
-      statusFilter?: 'open' | 'claimed' | 'pendingReview' | 'awaitingValidation' | 'disputed' | 'paid'
+      statusFilter?: 'open' | 'claimed' | 'pendingReview' | 'awaitingValidation' | 'disputed' | 'paid' | 'rejected'
     ): Promise<BountyAccount[]> => {
       const program = buildReadOnlyProgram();
       const all = await // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -596,5 +622,7 @@ export function useBounty() {
     deriveBountyPda,
     deriveVaultPda,
     deriveValidationPda,
+    deriveValidatorStakePda,
+    deriveValidatorStakeVaultPda,
   };
 }
