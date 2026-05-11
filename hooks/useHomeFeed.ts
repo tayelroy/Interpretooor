@@ -26,6 +26,9 @@ export interface HomeFeedPost {
 const ARWEAVE_GRAPHQL =
   (process.env.NEXT_PUBLIC_IRYS_GATEWAY ?? 'https://devnet.irys.xyz') + '/graphql';
 
+const PROGRAM_ID =
+  process.env.NEXT_PUBLIC_BOUNTY_PROGRAM_ID ?? '5kRPV7z2BUQn5rEXAhAPbBdHGU4KAYKo8FXBwmG3ahiP';
+
 const FEED_QUERY = `
   query InterpretooorFeed($first: Int!) {
     transactions(
