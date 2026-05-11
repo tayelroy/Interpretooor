@@ -1,104 +1,111 @@
 # Interpretooor
 
-## Project Overview
+<p align="center">
+  <img src="Interpretooor_Logo.png" width="200" alt="Interpretooor Logo">
+</p>
 
-Interpretooor is an experimental interpreter tooling project focused on providing a lightweight, extensible environment for parsing, executing, and exploring small languages and code snippets. This README summarizes goals, features, architecture, usage, and next steps.
+> The Verifiable, Nuance-Aware Translation Protocol.
 
-## Goals
+[![Solana](https://img.shields.io/badge/Blockchain-Solana-green?style=flat-square&logo=solana)](https://solana.com)
+[![Next.js](https://img.shields.io/badge/Frontend-Next.js-black?style=flat-square&logo=next.js)](https://nextjs.org/)
+[![Arweave](https://img.shields.io/badge/Storage-Arweave-blue?style=flat-square)](https://arweave.org/)
 
-- Provide a minimal interpreter platform for education and rapid prototyping.
-- Make language plugins easy to add and test.
-- Offer a reproducible development environment for experiments and demos.
+## What Interpretooor Does
+Interpretooor is a decentralized, cultural-translation protocol designed to ensure that translated content preserves its original meaning, tone, idioms, and intent. Instead of relying on lossy machine translation or unverified manual translation, Interpretooor uses a custom **Semantic Markdown (.mdh)** format to encode cultural context directly into the text.
 
-## Key Features (planned)
+The protocol bridges human context with decentralized execution:
+- **Writers** author rich-text `.mdh` documents and fund translation bounties in USDC.
+- **Translators** interpret the text with the assistance of an AI co-pilot.
+- **Validators** stake tokens to review translations and reach consensus on fidelity.
+- **Arweave** permanently stores the immutable source and translated material.
+- **Solana** smart contracts handle the escrow, yield generation, and settlement of bounties.
 
-- Pluggable frontends/parsers for multiple toy languages
-- REPL and batch execution modes
-- Stepper/tracing for debugging and educational walkthroughs
-- Small standard library for I/O and common utilities
-- Test harness for interpreter specs and example programs
+## Why Interpretooor is Useful
+Traditional translation platforms often strip away the unique cultural nuances of the source text. Machine translation is fast but contextually blind. Interpretooor solves this by combining the speed of AI, the context-awareness of human validators, and the economic guarantees of blockchains.
 
-## Status
+- **Semantic Fidelity:** The `.mdh` format allows writers to embed hidden semantic tags (e.g., sarcasm, idioms, persuasive intent) that translators and AI must respect.
+- **Decentralized Escrow & Yield:** Bounties are locked in a Solana smart contract (Anchor). While funds are escrowed, they are deployed to Kamino Finance to generate continuous APY.
+- **Validator Consensus & AI Oracle Fallback:** Translations require double-attestation from staked human validators to pass. If validators dispute a translation, an automated backend oracle (OpenAI) deterministically resolves it.
+- **Permanent Availability:** Both the original and translated content are batched and stored immutably on Arweave (via Irys), ensuring no reliance on centralized servers.
 
-- Prototype: core scaffolding present. (Update with PRD-derived milestones.)
+## Getting Started
 
-## Installation
+### Prerequisites
+- [Node.js](https://nodejs.org/) (v18+)
+- [Rust](https://www.rust-lang.org/) & [Solana CLI](https://docs.solana.com/cli/install-solana-cli-tools) (for local smart contract development)
+- [Anchor Framework](https://www.anchor-lang.com/docs/installation) (v0.30+)
+- A funded Solana Devnet wallet for local deployments.
 
-Requirements: Python 3.10+ (or specify your preferred runtime).
+### Installation
 
-Quick start (example using Python virtualenv):
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/tayelroy/Interpretooor.git
+   cd Interpretooor
+   ```
 
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+   *Note: This will install dependencies for both the frontend (Next.js) and the `irys-relayer` / `crank` backend services.*
+
+3. **Set up Environment Variables:**
+   Create a `.env` file from the example (if available) and fill in your keys (OpenAI, Supabase, Privy, etc.):
+   ```bash
+   cp .env.example .env
+   ```
+
+### Running Locally
+
+To run the full stack locally, you need to spin up the frontend and backend services:
+
+**1. Start the Frontend Application**
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt  # if this repo adds one
-# Run interpreter (example placeholder)
-python -m interpretooor.main
+npm run dev
+```
+The application will be available at `http://localhost:3000`.
+
+**2. Start the Irys Relayer Service** (Terminal 2)
+The relayer handles the sponsored upload of files to Arweave.
+```bash
+cd backend/irys-relayer
+npm run dev
 ```
 
-If you prefer Node/JS or another runtime, replace the steps above accordingly.
-
-## Usage
-
-- REPL mode: `python -m interpretooor.repl` (placeholder — update to real module)
-- Run a file: `python -m interpretooor run examples/hello.foo`
-- Run tests: `pytest tests/` (if tests are present)
-
-Replace commands with the concrete CLI once the implementation exposes them.
-
-## Example
-
-Here is a simple example program (toy language):
-
-```text
-print("Hello from Interpretooor")
+**3. Start the AI Oracle Crank** (Terminal 3)
+The crank automates the dispute resolution mechanism and legacy payout rules.
+```bash
+cd backend/crank
+npm run dev
 ```
 
-Run it with the interpreter once the language plugin is available.
+### Smart Contract Deployment
+If you make changes to the Solana programs (`anchor/programs/bounty` or `anchor/programs/vault`), rebuild and deploy them to Devnet:
+```bash
+cd anchor
+anchor build
+anchor deploy --provider.cluster devnet
+```
 
-## Architecture Overview
+## Where to Get Help
+If you encounter any issues while setting up or using the platform:
+- **Issues:** Please check the [GitHub Issues](https://github.com/tayelroy/Interpretooor/issues) page to see if your problem has already been reported.
+- **Documentation:** Review the `CLAUDE.md` and deep-dive documentation in the repository for extensive architectural overview and codebase structure.
 
-- `parser/` — language parsers (one parser per language)
-- `core/` — interpreter runtime, evaluator, environment
-- `cli/` — command-line interface and REPL
-- `tests/` — unit and integration tests for language behaviour
+## Maintainers and Contributing
+Interpretooor is an open-source project, and contributions are welcome!
 
-The runtime separates parsing, AST transformation, and evaluation to make testing and instrumentation straightforward.
+### Maintainers
+- [@tayelroy](https://github.com/tayelroy)
 
-## File Layout (expected)
+### Contributing
+1. Fork the repository.
+2. Create a feature branch: `git checkout -b feature/my-new-feature`
+3. Commit your changes. Ensure you follow the established style guide.
+4. Push to the branch: `git push origin feature/my-new-feature`
+5. Submit a pull request.
 
-- `Interpretooor/` — top-level project folder (this README lives here)
-- `examples/` — example programs
-- `languages/` — pluggable language implementations
-- `docs/` — design docs and PRD (place your PRD here as `PRD.md`)
+Please keep pull requests atomic and ensure your code integrates cleanly with the existing Next.js frontend, AI oracle, and Anchor programs.
 
-## Contributing
-
-- Create an issue describing the feature or bug.
-- Send a focused PR with tests and documentation.
-- Follow the coding style used in the repository.
-
-## PRD Summary (extracted)
-
-Source: [Interpretooor/PRD.md](Interpretooor/PRD.md)
-
-High-level: Interpretooor ("The Verifiable, Nuance-Aware Translation Protocol") is a hackathon MVP that turns an authored markdown document with Semantic Context Markup (SCM) into verified, culturally-accurate translations with on-chain attestations and micro-payments.
-
-Key points:
-
-- **Target users:** Native-language writers, bilingual cultural validators, global readers, and integrators/developers.
-- **Core vision:** Publish once; generate verified, culturally-accurate translations backed by on-chain proofs and automated micropayments.
-- **MVP goals:** Editor plugin (Obsidian/web), LLM-driven translation with a JSON reasoning trace, Solana Devnet Anchor program for job escrow + attestations, and a validator UX that triggers payment splitting.
-- **SCM (markup):** Hybrid Markdown + XML-like tags, e.g., `<idiom origin="..." meaning="...">`, `<tone level="formal|casual">`, and `<intent ...>`; backend receives `.mdh` payload and writer public key.
-- **Verification model:** LLM produces `translation + trace + hash`; a validator signs the hash; the Solana program stores the hash and splits `1 USDC` according to the specified reward split (validator, AI, protocol).
-- **Success criteria (demo):** SCM-guided output is demonstrably better than baseline MT; end-to-end translation + minting under ~15s; reliable payment splitting on Solana Devnet.
-- **Tech stack:** Editor (Obsidian plugin / Next.js), Backend (Node.js + LLM API), Blockchain (Solana, Anchor, SPL USDC), Wallets (Phantom), optional Circle CCTP for cross-chain tips.
-- **Roadmap / trade-offs:** MVP uses centralized LLM and off-chain storage (hash on-chain). Post-hackathon plans include World ID for validator uniqueness, decentralized storage (Arweave), and decentralized AI inference in later versions.
-
-
-## Roadmap
-
-1. Stabilize core evaluator and REPL
-2. Add one language plugin with comprehensive tests
-3. Add tracing/stepper UI or CLI mode
-4. Document PRD-derived acceptance tests
+---
