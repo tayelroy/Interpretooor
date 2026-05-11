@@ -1,4 +1,4 @@
-import type { InterpretationResult } from '@/lib/ai/gemini-interpreter';
+import type { InterpretationResult } from '@/lib/ai/openai-interpreter';
 
 export type { InterpretationResult };
 

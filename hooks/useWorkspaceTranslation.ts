@@ -7,7 +7,7 @@ import { PublicKey } from '@solana/web3.js';
 import { parseMdh, type ParsedMdh } from '@/lib/mdh-utils';
 import { useBounty, type BountyAccount } from '@/hooks/useBounty';
 import { toast } from 'sonner';
-import type { InterpretationResult } from '@/lib/ai/gemini-interpreter';
+import type { InterpretationResult } from '@/lib/ai/openai-interpreter';
 
 export type { InterpretationResult as AiSuggestion };
 

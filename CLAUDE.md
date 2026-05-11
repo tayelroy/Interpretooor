@@ -136,13 +136,13 @@ interface BountyAccount {
   - `useDraftPersistence.ts` — localStorage hydration + debouncing, kept out of Editor.
 - **Pure utilities** in `lib/` — isolated, testable, no side effects.
   - `lib/mdh-utils.ts` — all `.mdh` parsing and export logic.
-  - `lib/ai/gemini-interpreter.ts` — consumes `ParsedMdh` to build the LLM prompt; uses `tags` array to inject phrase-level context.
+  - `lib/ai/openai-interpreter.ts` — consumes `ParsedMdh` to build the LLM prompt; uses `tags` array to inject phrase-level context.
 - **Blockchain reads/writes** in custom hooks only.
   - `useBounty.ts`, `useMyArticles.ts`
 
 ### How `ParsedMdh` flows into the AI prompt
 
-`gemini-interpreter.ts` assembles `ParsedMdh` into a structured LLM system prompt:
+`openai-interpreter.ts` assembles `ParsedMdh` into a structured LLM system prompt:
 
 ```
 Translate the following text to [targetLanguage from BountyAccount].

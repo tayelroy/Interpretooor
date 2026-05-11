@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
-import { interpretMdh } from '@/lib/ai/gemini-interpreter';
+import { interpretMdh } from '@/lib/ai/openai-interpreter';
 import type { ParsedMdh } from '@/lib/mdh-utils';
 
 const API_KEY = process.env.OPENAI_API_KEY;

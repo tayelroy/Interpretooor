@@ -3,7 +3,7 @@
  *
  * Runs every hour. Two sweeps:
  *   1. PendingReview: executes payout once 48-hour optimistic window expires (legacy).
- *   2. Disputed: fetches original + translation from Arweave, calls AI oracle (GPT-4o),
+ *   2. Disputed: fetches original + translation from Arweave, calls AI oracle (GPT-5.4-mini),
  *      and submits resolve_dispute with the backend keypair.
  */
 
@@ -206,7 +206,7 @@ async function runOracleSweep(
 
       // ── 2. Call AI oracle ──────────────────────────────────────────────
       const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-5.4-mini',
         messages: [
           { role: 'system', content: ORACLE_RUBRIC },
           { role: 'user', content: `ORIGINAL:\n${origText}\n\nTRANSLATION:\n${transText}` },

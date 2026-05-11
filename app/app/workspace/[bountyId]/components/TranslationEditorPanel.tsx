@@ -1,6 +1,6 @@
 import { Upload, AlertCircle } from 'lucide-react';
 import type { ParsedMdh } from '@/lib/mdh-utils';
-import type { InterpretationResult } from '@/lib/ai/gemini-interpreter';
+import type { InterpretationResult } from '@/lib/ai/openai-interpreter';
 import MdhRenderer from '@/app/components/MdhRenderer';
 import AiSuggestionPanel from './AiSuggestionPanel';
 

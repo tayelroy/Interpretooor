@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Sparkles, Loader2, ChevronDown } from 'lucide-react';
-import type { InterpretationResult } from '@/lib/ai/gemini-interpreter';
+import type { InterpretationResult } from '@/lib/ai/openai-interpreter';
 
 interface Props {
   aiLoading: boolean;
