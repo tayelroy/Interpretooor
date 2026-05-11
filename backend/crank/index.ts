@@ -31,6 +31,7 @@ const USDC_MINT = new PublicKey(
   process.env.USDC_MINT ?? '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU'
 );
 const IRYS_GATEWAY = process.env.IRYS_GATEWAY ?? 'https://devnet.irys.xyz';
+const RELAYER_URL = process.env.RELAYER_URL ?? 'http://localhost:4001';
 const REVIEW_WINDOW_SECS = 48 * 60 * 60;
 const VALIDATION_STALE_SECS = 7 * 24 * 60 * 60;
 const CRON_SCHEDULE = process.env.CRANK_SCHEDULE ?? '0 * * * *';
@@ -56,6 +57,37 @@ async function fetchArweaveText(txId: string): Promise<string> {
   const res = await fetch(`${IRYS_GATEWAY}/${txId}`);
   if (!res.ok) throw new Error(`Arweave fetch failed for ${txId}: ${res.status}`);
   return res.text();
+}
+
+/**
+ * After a translation is validated and paid, re-upload it to Arweave with
+ * Doc-Type: article so it appears on the home feed alongside original content.
+ */
+async function publishVerifiedTranslation(
+  translatedTxId: string,
+  uploaderAddress: string
+): Promise<void> {
+  try {
+    const text = await fetchArweaveText(translatedTxId);
+    const res = await fetch(`${RELAYER_URL}/sponsor-upload`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain',
+        'X-Uploader-Address': uploaderAddress,
+        'X-Doc-Type': 'article',
+      },
+      body: text,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'unknown' }));
+      throw new Error(`Relayer error: ${JSON.stringify(err)}`);
+    }
+    const { id } = await res.json() as { id: string };
+    console.log(`[crank/publish] ✓ Verified translation published to Arweave as article: ${id}`);
+  } catch (err) {
+    // Non-fatal: payout already succeeded, only the home feed promotion failed
+    console.error(`[crank/publish] ✗ Failed to publish verified translation: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 // ─── Wallet & Connection ─────────────────────────────────────────────────────
@@ -173,6 +205,11 @@ async function runPayoutSweep(
         })
         .rpc();
       console.log(`[crank/payout] ✓ ${b.publicKey.toBase58()} → ${data.translator.toBase58()}. Sig: ${sig}`);
+
+      // Promote the verified translation to the home feed
+      if (data.translatedTxId) {
+        await publishVerifiedTranslation(data.translatedTxId, keypair.publicKey.toBase58());
+      }
     } catch (err: unknown) {
       console.error(`[crank/payout] ✗ ${b.publicKey.toBase58()}: ${err instanceof Error ? err.message : String(err)}`);
     }
