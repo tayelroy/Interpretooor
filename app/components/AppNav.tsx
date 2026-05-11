@@ -11,6 +11,7 @@ const navItems = [
   { label: 'Home',      href: '/app' },
   { label: 'Translate', href: '/app/translate' },
   { label: 'Validate',  href: '/app/validate' },
+  { label: 'Stake',     href: '/app/stake' },
   { label: 'Write',     href: '/app/write' },
   { label: 'Dashboard', href: '/app/dashboard' },
 ];
