@@ -28,7 +28,6 @@ const FEED_QUERY = `
       tags: [
         { name: "App-Name",       values: ["Interpretooor"] }
         { name: "Content-Format", values: ["mdh"] }
-        { name: "Doc-Type",       values: ["article", "translation"] }
       ]
       first: $first
       order: DESC
@@ -104,6 +103,10 @@ export function useHomeFeed() {
           const docType = node.tags.find((t) => t.name === 'Doc-Type')?.value ?? 'article';
           const timestampTag = node.tags.find((t) => t.name === 'Timestamp')?.value;
           const timestamp = timestampTag ? parseInt(timestampTag, 10) : undefined;
+
+          if (docType === 'attestation') {
+            return null;
+          }
 
           let title = '';
           let excerpt = '';
