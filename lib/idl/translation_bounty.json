@@ -23,7 +23,7 @@
     },
     {
       "name": "requestUnstake",
-      "discriminator": [7, 82, 135, 175, 178, 184, 245, 116],
+      "discriminator": [44, 154, 110, 253, 160, 202, 54, 34],
       "accounts": [
         { "name": "validator", "writable": true, "signer": true },
         { "name": "stakeAccount", "writable": true, "pda": { "seeds": [{ "kind": "const", "value": [118, 97, 108, 105, 100, 97, 116, 111, 114, 95, 115, 116, 97, 107, 101] }, { "kind": "account", "path": "validator" }] } }
@@ -32,7 +32,7 @@
     },
     {
       "name": "completeUnstake",
-      "discriminator": [44, 118, 205, 113, 42, 191, 98, 150],
+      "discriminator": [79, 98, 40, 241, 100, 30, 25, 234],
       "accounts": [
         { "name": "validator", "writable": true, "signer": true },
         { "name": "stakeAccount", "writable": true, "pda": { "seeds": [{ "kind": "const", "value": [118, 97, 108, 105, 100, 97, 116, 111, 114, 95, 115, 116, 97, 107, 101] }, { "kind": "account", "path": "validator" }] } },
