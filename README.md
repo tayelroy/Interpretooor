@@ -7,6 +7,7 @@
 > The Verifiable, Nuance-Aware Translation Protocol.
 
 > Product Pitch: https://youtu.be/es4R-qevc8U
+> 
 > Product Demo: https://youtu.be/rax5_S70gSE
 
 [![Solana](https://img.shields.io/badge/Blockchain-Solana-green?style=flat-square&logo=solana)](https://solana.com)
