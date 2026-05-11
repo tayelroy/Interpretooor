@@ -33,15 +33,25 @@ export function createPrivyToSolanaAdapter(wallet: PrivySolanaWallet): PrivySola
 
     signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
       const isVersioned = 'version' in tx;
-      const serialized: Uint8Array = isVersioned
-        ? (tx as VersionedTransaction).serialize()
-        : (tx as Transaction).serialize({ requireAllSignatures: false });
+      console.log('[privy-adapter] signTransaction called. isVersioned:', isVersioned);
+      try {
+        const serialized: Uint8Array = isVersioned
+          ? (tx as VersionedTransaction).serialize()
+          : (tx as Transaction).serialize({ requireAllSignatures: false });
 
-      const { signedTransaction } = await wallet.signTransaction({ transaction: serialized });
+        console.log('[privy-adapter] calling wallet.signTransaction...');
+        const { signedTransaction } = await wallet.signTransaction({ transaction: serialized });
+        console.log('[privy-adapter] wallet.signTransaction returned successfully. Length:', signedTransaction.length);
 
-      return (isVersioned
-        ? VersionedTransaction.deserialize(signedTransaction)
-        : Transaction.from(signedTransaction)) as T;
+        const deserialized = isVersioned
+          ? VersionedTransaction.deserialize(signedTransaction)
+          : Transaction.from(signedTransaction);
+        console.log('[privy-adapter] successfully deserialized signed tx');
+        return deserialized as T;
+      } catch (err) {
+        console.error('[privy-adapter] error in signTransaction:', err);
+        throw err;
+      }
     },
 
     signAllTransactions: async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
