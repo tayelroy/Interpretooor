@@ -35,7 +35,6 @@ const FEED_QUERY = `
       tags: [
         { name: "App-Name",       values: ["Interpretooor"] }
         { name: "Content-Format", values: ["mdh"] }
-        { name: "Doc-Type",       values: ["article", "translation"] }
       ]
       first: $first
       order: DESC
@@ -101,11 +100,11 @@ export function useHomeFeed() {
       const program = new anchor.Program(idl as any, provider);
       
       const allBounties = await (program.account as any).bountyAccount.all();
+      const translationIds = new Set<string>();
       const paidTranslationIds = new Set<string>();
       allBounties.forEach((b: any) => {
-        if ('paid' in b.account.status && b.account.translatedTxId) {
-          paidTranslationIds.add(b.account.translatedTxId);
-        }
+        if (b.account.translatedTxId) translationIds.add(b.account.translatedTxId);
+        if ('paid' in b.account.status && b.account.translatedTxId) paidTranslationIds.add(b.account.translatedTxId);
       });
 
       // 2. Query Arweave
@@ -128,11 +127,12 @@ export function useHomeFeed() {
         edges.map(async ({ node }): Promise<HomeFeedPost | null> => {
           const txId = node.id;
           const uploader = node.tags.find((t) => t.name === 'Uploader')?.value ?? '';
-          const docType = node.tags.find((t) => t.name === 'Doc-Type')?.value ?? 'article';
           const timestampTag = node.tags.find((t) => t.name === 'Timestamp')?.value;
           const timestamp = timestampTag ? parseInt(timestampTag, 10) : undefined;
-          
-          if (docType === 'translation' && !paidTranslationIds.has(txId)) {
+
+          const isTranslation = translationIds.has(txId);
+
+          if (isTranslation && !paidTranslationIds.has(txId)) {
             return null; // Not verified yet, do not show on home page
           }
 
@@ -169,7 +169,7 @@ export function useHomeFeed() {
             tagCount,
             tagKeys,
             timestamp,
-            isTranslation: docType === 'translation',
+            isTranslation,
           };
         })
       );
