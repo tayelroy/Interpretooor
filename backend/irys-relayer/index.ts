@@ -64,6 +64,7 @@ app.post('/sponsor-upload', async (req: Request, res: Response) => {
   try {
     const mdhContent = req.body as string;
     const uploaderAddress = req.headers['x-uploader-address'] as string | undefined;
+    const docType = (req.headers['x-doc-type'] as string | undefined) ?? 'article';
 
     if (!mdhContent || typeof mdhContent !== 'string') {
       res.status(400).json({ error: 'Request body must be a non-empty text/plain .mdh string' });
@@ -80,6 +81,7 @@ app.post('/sponsor-upload', async (req: Request, res: Response) => {
       { name: 'App-Name', value: 'Interpretooor' },
       { name: 'Program-ID', value: process.env.BOUNTY_PROGRAM_ID ?? '' },
       { name: 'Uploader', value: uploaderAddress },
+      { name: 'Doc-Type', value: docType },
     ];
 
     const node = await getIrysNode();

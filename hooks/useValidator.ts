@@ -346,6 +346,7 @@ export function useValidator() {
           headers: {
             'Content-Type': 'text/plain',
             'X-Uploader-Address': activeWallet.address,
+            'X-Doc-Type': 'attestation',
           },
           body: JSON.stringify(assessmentPayload),
         }

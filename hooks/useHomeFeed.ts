@@ -31,6 +31,7 @@ const FEED_QUERY = `
         { name: "App-Name",       values: ["Interpretooor"] }
         { name: "Content-Format", values: ["mdh"] }
         { name: "Program-ID",     values: [$programId] }
+        { name: "Doc-Type",       values: ["article"] }
       ]
       first: $first
       order: DESC
