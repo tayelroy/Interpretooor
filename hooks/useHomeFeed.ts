@@ -26,16 +26,12 @@ export interface HomeFeedPost {
 const ARWEAVE_GRAPHQL =
   (process.env.NEXT_PUBLIC_IRYS_GATEWAY ?? 'https://devnet.irys.xyz') + '/graphql';
 
-const PROGRAM_ID =
-  process.env.NEXT_PUBLIC_BOUNTY_PROGRAM_ID ?? '5kRPV7z2BUQn5rEXAhAPbBdHGU4KAYKo8FXBwmG3ahiP';
-
 const FEED_QUERY = `
-  query InterpretooorFeed($first: Int!, $programId: String!) {
+  query InterpretooorFeed($first: Int!) {
     transactions(
       tags: [
         { name: "App-Name",       values: ["Interpretooor"] }
         { name: "Content-Format", values: ["mdh"] }
-        { name: "Program-ID",     values: [$programId] }
         { name: "Doc-Type",       values: ["article", "translation"] }
       ]
       first: $first
@@ -113,7 +109,7 @@ export function useHomeFeed() {
       const gqlRes = await fetch(ARWEAVE_GRAPHQL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: FEED_QUERY, variables: { first: 50, programId: PROGRAM_ID } }),
+        body: JSON.stringify({ query: FEED_QUERY, variables: { first: 50 } }),
       });
 
       if (!gqlRes.ok) throw new Error(`Arweave GraphQL error: ${gqlRes.status}`);
