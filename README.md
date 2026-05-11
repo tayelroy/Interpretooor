@@ -4,10 +4,6 @@
   <img src="Interpretooor_Logo.png" width="200" alt="Interpretooor Logo">
 </p>
 
-<p align="center">
-   <img src="docs/architecture/Interpretooor_architecture_diagram.png" alt="Interpretooor architecture diagram">
-</p>
-
 > The Verifiable, Nuance-Aware Translation Protocol.
 
 [![Solana](https://img.shields.io/badge/Blockchain-Solana-green?style=flat-square&logo=solana)](https://solana.com)
