@@ -45,6 +45,13 @@ export default function WorkspacePage() {
           onBack={() => router.push(`/app/bounty/${bountyId}`)}
         />
 
+        <SubmissionFooter
+          canSubmit={canSubmit}
+          submitting={submitting}
+          submitSuccess={submitSuccess}
+          onSubmit={actions.submit}
+        />
+
         <div className="flex flex-col lg:flex-row gap-6 bg-stone-100 p-3 rounded-[40px]">
           <OriginalSourcePanel parsedMdh={originalParsed} />
           <TranslationEditorPanel
@@ -58,13 +65,6 @@ export default function WorkspacePage() {
             onApplyAiSuggestion={actions.applyAiSuggestion}
           />
         </div>
-
-        <SubmissionFooter
-          canSubmit={canSubmit}
-          submitting={submitting}
-          submitSuccess={submitSuccess}
-          onSubmit={actions.submit}
-        />
       </div>
     </div>
   );
