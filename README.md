@@ -4,21 +4,30 @@
   <img src="Interpretooor_Logo.png" width="200" alt="Interpretooor Logo">
 </p>
 
+<p align="center">
+   <img src="docs/architecture/Interpretooor_architecture_diagram.png" alt="Interpretooor architecture diagram">
+</p>
+
 > The Verifiable, Nuance-Aware Translation Protocol.
 
 [![Solana](https://img.shields.io/badge/Blockchain-Solana-green?style=flat-square&logo=solana)](https://solana.com)
 [![Next.js](https://img.shields.io/badge/Frontend-Next.js-black?style=flat-square&logo=next.js)](https://nextjs.org/)
 [![Arweave](https://img.shields.io/badge/Storage-Arweave-blue?style=flat-square)](https://arweave.org/)
 
+## Architecture
+Interpretooor is organized around a clear split between the Next.js frontend, the semantic `.mdh` content layer, the Irys relayer, and the Solana bounty state on-chain. Writers draft and validate content in the app, the relayer publishes immutable content to Arweave, and Anchor programs keep bounty and validation state on Solana.
+
+![Interpretooor architecture diagram](docs/architecture/Interpretooor_architecture_diagram.png)
+
 ## What Interpretooor Does
 Interpretooor is a decentralized, cultural-translation protocol designed to ensure that translated content preserves its original meaning, tone, idioms, and intent. Instead of relying on lossy machine translation or unverified manual translation, Interpretooor uses a custom **Semantic Markdown (.mdh)** format to encode cultural context directly into the text.
 
 The protocol bridges human context with decentralized execution:
 - **Writers** author rich-text `.mdh` documents and fund translation bounties in USDC.
-- **Translators** interpret the text with the assistance of an AI co-pilot.
+- **AI Translator** directly translate articles with OpenAI, persistent memory.json, so the AI can self-learn.
 - **Validators** stake tokens to review translations and reach consensus on fidelity.
 - **Arweave** permanently stores the immutable source and translated material.
-- **Solana** smart contracts handle the escrow, yield generation, and settlement of bounties.
+- **Kamino** Uses validators stake to deposit into Kamino vault and earn yield. 
 
 ## Why Interpretooor is Useful
 Traditional translation platforms often strip away the unique cultural nuances of the source text. Machine translation is fast but contextually blind. Interpretooor solves this by combining the speed of AI, the context-awareness of human validators, and the economic guarantees of blockchains.
@@ -91,7 +100,7 @@ anchor deploy --provider.cluster devnet
 ## Where to Get Help
 If you encounter any issues while setting up or using the platform:
 - **Issues:** Please check the [GitHub Issues](https://github.com/tayelroy/Interpretooor/issues) page to see if your problem has already been reported.
-- **Documentation:** Review the `CLAUDE.md` and deep-dive documentation in the repository for extensive architectural overview and codebase structure.
+- **Documentation:** Review the [architecture diagram note](docs/architecture/architecture-diagram.md), `CLAUDE.md`, and the deep-dive documentation in the repository for the architectural overview and codebase structure.
 
 ## Maintainers and Contributing
 Interpretooor is an open-source project, and contributions are welcome!
