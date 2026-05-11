@@ -24,6 +24,11 @@ const app = express();
 app.use(cors());
 app.use(express.text({ type: 'text/plain', limit: '10mb' }));
 
+const PROGRAM_ID =
+  process.env.BOUNTY_PROGRAM_ID ??
+  process.env.NEXT_PUBLIC_BOUNTY_PROGRAM_ID ??
+  '5kRPV7z2BUQn5rEXAhAPbBdHGU4KAYKo8FXBwmG3ahiP';
+
 // ─── Irys node (singleton, lazily initialized) ───────────────────────────────
 
 let irysNode: Irys | null = null;
@@ -79,7 +84,7 @@ app.post('/sponsor-upload', async (req: Request, res: Response) => {
       { name: 'Content-Type', value: 'text/plain' },
       { name: 'Content-Format', value: 'mdh' },
       { name: 'App-Name', value: 'Interpretooor' },
-      { name: 'Program-ID', value: process.env.BOUNTY_PROGRAM_ID ?? '' },
+      { name: 'Program-ID', value: PROGRAM_ID },
       { name: 'Uploader', value: uploaderAddress },
       { name: 'Doc-Type', value: docType },
     ];
