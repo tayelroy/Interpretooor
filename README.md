@@ -6,6 +6,9 @@
 
 > The Verifiable, Nuance-Aware Translation Protocol.
 
+> Product Pitch: https://youtu.be/es4R-qevc8U
+> Product Demo: https://youtu.be/rax5_S70gSE
+
 [![Solana](https://img.shields.io/badge/Blockchain-Solana-green?style=flat-square&logo=solana)](https://solana.com)
 [![Next.js](https://img.shields.io/badge/Frontend-Next.js-black?style=flat-square&logo=next.js)](https://nextjs.org/)
 [![Arweave](https://img.shields.io/badge/Storage-Arweave-blue?style=flat-square)](https://arweave.org/)
