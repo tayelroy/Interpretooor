@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import type { ParsedMdh } from '@/lib/mdh-utils';
+import { getRelevantCorrections } from '@/lib/ai/memory-store';
 
 export interface ReasoningItem {
   tagKey: string;
@@ -28,11 +29,20 @@ export async function interpretMdh(
 ): Promise<InterpretationResult> {
   const semanticContext = buildSemanticContext(parsed);
 
+  const relevantCorrections = await getRelevantCorrections(targetLang);
+  const memoryPrompt = relevantCorrections.length > 0 
+    ? `\nLEARN FROM PAST MISTAKES:\nHere are previous corrections made by human validators. Apply these learnings to your current translation:\n` +
+      relevantCorrections.map(c => 
+        `- Source: "${c.originalPhrase}" | You previously translated: "${c.aiTranslation}" | Validator corrected to: "${c.validatorCorrection}" | Reason: ${c.reasoning}`
+      ).join('\n')
+    : '';
+
   const systemPrompt = [
     'You are a cultural translation expert.',
     'Translate with semantic accuracy, preserving cultural nuances and idiomatic expressions.',
     'When translating annotated phrases, respect their semantic tags — never translate a sarcastic tone as genuinely positive, never translate idioms literally, preserve persuasive intent.',
-  ].join(' ');
+    memoryPrompt,
+  ].filter(Boolean).join(' ');
 
   const userPrompt = [
     `Translate the following text into ${targetLang}.`,

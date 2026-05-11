@@ -577,7 +577,7 @@ pub mod translation_bounty {
                 ctx.accounts.token_program.to_account_info(),
                 SplTransfer {
                     from: ctx.accounts.incorrect_validator_stake_vault.to_account_info(),
-                    to: ctx.accounts.correct_validator_token_account.to_account_info(),
+                    to: ctx.accounts.correct_validator_stake_token_account.to_account_info(),
                     authority: ctx.accounts.incorrect_validator_stake_acc.to_account_info(),
                 },
                 slash_signer,
@@ -911,7 +911,7 @@ pub struct Stake<'info> {
     #[account(
         init_if_needed,
         payer = validator,
-        token::mint = usdc_mint,
+        token::mint = stake_mint,
         token::authority = stake_account,
         seeds = [b"validator_stake_vault", validator.key().as_ref()],
         bump,
@@ -920,12 +920,12 @@ pub struct Stake<'info> {
 
     #[account(
         mut,
-        token::mint = usdc_mint,
+        token::mint = stake_mint,
         token::authority = validator,
     )]
     pub validator_token_account: Account<'info, TokenAccount>,
 
-    pub usdc_mint: Account<'info, Mint>,
+    pub stake_mint: Account<'info, Mint>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
@@ -961,19 +961,19 @@ pub struct CompleteUnstake<'info> {
         mut,
         seeds = [b"validator_stake_vault", validator.key().as_ref()],
         bump = stake_account.vault_bump,
-        token::mint = usdc_mint,
+        token::mint = stake_mint,
         token::authority = stake_account,
     )]
     pub stake_vault: Account<'info, TokenAccount>,
 
     #[account(
         mut,
-        token::mint = usdc_mint,
+        token::mint = stake_mint,
         token::authority = validator,
     )]
     pub validator_token_account: Account<'info, TokenAccount>,
 
-    pub usdc_mint: Account<'info, Mint>,
+    pub stake_mint: Account<'info, Mint>,
     pub token_program: Program<'info, Token>,
 }
 
@@ -1194,17 +1194,21 @@ pub struct ResolveDispute<'info> {
     #[account(mut)]
     pub incorrect_validator_stake_acc: Account<'info, ValidatorStakeAccount>,
 
-    /// The stake vault of the incorrect validator (USDC transferred from here)
+    /// The stake vault of the incorrect validator (USDC/kUSDC transferred from here)
     #[account(
         mut,
-        token::mint = usdc_mint,
+        token::mint = stake_mint,
         token::authority = incorrect_validator_stake_acc,
     )]
     pub incorrect_validator_stake_vault: Account<'info, TokenAccount>,
 
-    /// The ATA of the correct validator (receives slashed stake + bounty share)
+    /// The ATA of the correct validator (receives bounty share in USDC)
     #[account(mut, token::mint = usdc_mint)]
     pub correct_validator_token_account: Account<'info, TokenAccount>,
+
+    /// The ATA of the correct validator for stake tokens (receives slashed stake in kUSDC)
+    #[account(mut, token::mint = stake_mint)]
+    pub correct_validator_stake_token_account: Account<'info, TokenAccount>,
 
     #[account(
         mut,
@@ -1217,6 +1221,7 @@ pub struct ResolveDispute<'info> {
     pub protocol_token_account: Account<'info, TokenAccount>,
 
     pub usdc_mint: Account<'info, Mint>,
+    pub stake_mint: Account<'info, Mint>,
     pub token_program: Program<'info, Token>,
 }
 

@@ -12,8 +12,11 @@ import { useWallets } from '@privy-io/react-auth/solana';
 import * as anchor from '@coral-xyz/anchor';
 import { Connection, PublicKey } from '@solana/web3.js';
 import {
+  createAssociatedTokenAccountInstruction,
   getAssociatedTokenAddressSync,
+  getAccount,
   TOKEN_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
 } from '@solana/spl-token';
 import { createPrivyToSolanaAdapter } from '@/lib/solana/privy-adapter';
 import {
@@ -172,10 +175,26 @@ export function useValidator() {
       const program = buildProgram(provider);
       const validatorPubkey = provider.wallet.publicKey;
 
-      const amountRaw = new anchor.BN(amountUsdc * 1_000_000);
+      const amountRaw = new anchor.BN(Math.floor(amountUsdc * 1_000_000));
       const [stakeAccount] = deriveValidatorStakePda(validatorPubkey);
       const [stakeVault] = deriveValidatorStakeVaultPda(validatorPubkey);
       const validatorTokenAccount = getAssociatedTokenAddressSync(USDC_MINT, validatorPubkey);
+
+      const preInstructions: anchor.web3.TransactionInstruction[] = [];
+      try {
+        await getAccount(provider.connection, validatorTokenAccount);
+      } catch {
+        preInstructions.push(
+          createAssociatedTokenAccountInstruction(
+            validatorPubkey,
+            validatorTokenAccount,
+            validatorPubkey,
+            USDC_MINT,
+            TOKEN_PROGRAM_ID,
+            ASSOCIATED_TOKEN_PROGRAM_ID
+          )
+        );
+      }
 
       const sig = await program.methods
         .stake(amountRaw)
@@ -188,6 +207,7 @@ export function useValidator() {
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: anchor.web3.SystemProgram.programId,
         })
+        .preInstructions(preInstructions)
         .rpc();
 
       console.log('stake tx:', sig);
@@ -204,7 +224,7 @@ export function useValidator() {
       const program = buildProgram(provider);
       const validatorPubkey = provider.wallet.publicKey;
 
-      const amountRaw = new anchor.BN(amountUsdc * 1_000_000);
+      const amountRaw = new anchor.BN(Math.floor(amountUsdc * 1_000_000));
       const [stakeAccount] = deriveValidatorStakePda(validatorPubkey);
 
       const sig = await program.methods

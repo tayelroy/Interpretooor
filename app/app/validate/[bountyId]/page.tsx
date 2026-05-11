@@ -219,6 +219,38 @@ export default function ValidateAssessmentPage() {
         approve: overallVote,
       });
 
+      // --- MEMORY SYSTEM INTEGRATION ---
+      try {
+        if (translatedParsed) {
+          const transTags = translatedParsed.tags;
+          await Promise.all(
+            tags.map((tag, idx) => {
+              const aiTranslation = transTags[idx]?.phrase ?? '';
+              const validatorCorrection = decisions[idx]?.translatedPhrase ?? '';
+              const rationale = decisions[idx]?.rationale ?? '';
+
+              if (!validatorCorrection || !rationale) return Promise.resolve();
+
+              return fetch('/api/corrections', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  targetLang: bounty.targetLanguage,
+                  originalPhrase: tag.phrase,
+                  aiTranslation,
+                  validatorCorrection,
+                  reasoning: rationale,
+                  semanticTags: [{ key: tag.key, value: tag.value }],
+                }),
+              });
+            })
+          );
+        }
+      } catch (err) {
+        console.error('Failed to save to memory system:', err);
+      }
+      // --- END MEMORY SYSTEM INTEGRATION ---
+
       setDone(true);
       toast.success(
         overallVote
@@ -471,7 +503,7 @@ export default function ValidateAssessmentPage() {
                             }))
                           }
                           placeholder="Translated equivalent…"
-                          disabled={!isRegistered || hasAlreadyAttested || done || isDisputed}
+                          disabled={Boolean(!isRegistered || hasAlreadyAttested || done || isDisputed)}
                           className="w-full text-sm px-3 py-2 rounded-xl border border-stone-200 bg-white focus:outline-none focus:border-violet-400 disabled:opacity-50"
                         />
                       </div>
@@ -495,7 +527,7 @@ export default function ValidateAssessmentPage() {
                           }
                           placeholder="Does this translation preserve the semantic intent? Note any issues…"
                           rows={2}
-                          disabled={!isRegistered || hasAlreadyAttested || done || isDisputed}
+                          disabled={Boolean(!isRegistered || hasAlreadyAttested || done || isDisputed)}
                           className="w-full text-sm px-3 py-2 rounded-xl border border-stone-200 bg-white focus:outline-none focus:border-violet-400 resize-none disabled:opacity-50"
                         />
                       </div>
