@@ -8,7 +8,7 @@ export async function POST(req: Request) {
     // Basic validation
     const { targetLang, originalPhrase, aiTranslation, validatorCorrection, reasoning } = body;
     
-    if (!targetLang || !originalPhrase || !aiTranslation || !validatorCorrection || !reasoning) {
+    if (!targetLang || originalPhrase === undefined || aiTranslation === undefined || !validatorCorrection || !reasoning) {
       return NextResponse.json(
         { error: 'Missing required correction fields' },
         { status: 400 }

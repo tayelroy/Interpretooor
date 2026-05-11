@@ -163,9 +163,16 @@ export default function HomeFeed() {
               </div>
 
               {/* Title */}
-              <h2 className="font-serif not-italic text-[32px] leading-tight text-on-surface tracking-tight">
-                {post.title}
-              </h2>
+              <div className="flex items-start gap-3">
+                <h2 className="font-serif not-italic text-[32px] leading-tight text-on-surface tracking-tight">
+                  {post.title}
+                </h2>
+                {post.isTranslation && (
+                  <span className="px-2.5 py-1 bg-amber-100 text-amber-800 text-[10px] font-bold tracking-wider uppercase rounded-md whitespace-nowrap mt-2.5">
+                    Translated
+                  </span>
+                )}
+              </div>
 
               {/* Excerpt */}
               {post.excerpt && (

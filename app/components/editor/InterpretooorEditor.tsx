@@ -164,6 +164,7 @@ export default function InterpretooorEditor() {
     clearDraft,
     getSavedDraftKeys,
     loadDraftByKey,
+    deleteDraft,
   } = useDraftPersistence(activeWallet?.address);
 
   const { handlePublish, isPublishing, statusText } = usePublish({
@@ -198,6 +199,7 @@ export default function InterpretooorEditor() {
       if (assetId) {
         console.log(`🟢 7. Final mint complete: ${assetId}`);
         console.log(`🟢 Solscan Devnet: https://solscan.io/token/${assetId}?cluster=devnet`);
+        await deleteDraft();
         router.push(`/app/write/success?assetId=${assetId}`);
       }
     } catch (error) {

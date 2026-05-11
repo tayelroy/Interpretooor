@@ -41,6 +41,27 @@ function slotColor(record: ValidationRecord | null): string {
   return 'text-emerald-600';
 }
 
+function isValidationFull(record: ValidationRecord | null): boolean {
+  return !!record?.validator1 && !!record?.validator2;
+}
+
+function statusBadgeLabel(record: ValidationRecord | null, bounty: BountyAccount): string {
+  if (record && isValidationFull(record)) return 'Settled';
+  if ('paid' in bounty.status) return 'Settled';
+  if ('rejected' in bounty.status) return 'Settled';
+  if ('disputed' in bounty.status) return 'Disputed';
+  if ('awaitingValidation' in bounty.status) return 'Awaiting Validation';
+  return 'Open';
+}
+
+function statusBadgeClass(record: ValidationRecord | null, bounty: BountyAccount): string {
+  if (record && isValidationFull(record)) return 'bg-emerald-100 text-emerald-800';
+  if ('paid' in bounty.status || 'rejected' in bounty.status) return 'bg-stone-100 text-stone-700';
+  if ('disputed' in bounty.status) return 'bg-red-100 text-red-800';
+  if ('awaitingValidation' in bounty.status) return 'bg-amber-100 text-amber-800';
+  return 'bg-blue-100 text-blue-800';
+}
+
 export default function ValidatePage() {
   const router = useRouter();
   const { fetchAllBounties } = useBounty();
@@ -54,19 +75,15 @@ export default function ValidatePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const all = await fetchAllBounties('awaitingValidation');
+      console.log('[validate board] setBounties count:', all.length, all.map(b => b.publicKey.toBase58().slice(0,8)));
       setBounties(all);
 
-      // Fetch titles and validation records in parallel
-      const titleEntries = await Promise.all(
-        all.map(async (b) => [b.publicKey.toBase58(), await fetchArticleTitle(b.originalTxId)] as const)
-      );
-      setTitles(Object.fromEntries(titleEntries));
-
+      // Fetch records immediately — drives slot counts
       const recordEntries = await Promise.all(
         all.map(async (b) => {
           try {
@@ -78,25 +95,60 @@ export default function ValidatePage() {
         })
       );
       setRecords(Object.fromEntries(recordEntries));
+
+      // Fetch titles only for new bounties we haven't seen yet
+      setTitles(prev => {
+        const missing = all.filter(b => !prev[b.publicKey.toBase58()]);
+        if (missing.length === 0) return prev;
+        Promise.all(
+          missing.map(async (b) => [b.publicKey.toBase58(), await fetchArticleTitle(b.originalTxId)] as const)
+        ).then(entries => setTitles(t => ({ ...t, ...Object.fromEntries(entries) })));
+        return prev;
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load bounties');
+      if (!silent) setError(err instanceof Error ? err.message : 'Failed to load bounties');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [fetchAllBounties, fetchValidationRecord]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  const myBounties = bounties.filter(b => b.author.toBase58() === activeAddress);
-  const pendingBounties = bounties.filter(b => b.author.toBase58() !== activeAddress);
+  // A bounty is "live" only if on-chain status is awaitingValidation AND
+  // at least one validator slot is still open for registration/attestation.
+  // Once both validator slots are filled, the job is terminal for the board
+  // even if the status field still lags behind settlement.
+  const activeBounties = bounties.filter(b => {
+    if (!('awaitingValidation' in b.status)) return false;
+    const rec = records[b.publicKey.toBase58()];
+    if (isValidationFull(rec)) return false;
+    return true;
+  });
+  const myBounties = activeBounties.filter(b => b.author.toBase58() === activeAddress);
+  const pendingBounties = activeBounties.filter(b => b.author.toBase58() !== activeAddress);
 
   const renderBountyCard = (bounty: BountyAccount, i: number, isHorizontal: boolean) => {
     const pda = bounty.publicKey.toBase58();
     const record = records[pda] ?? null;
     const title = titles[pda] ?? '…';
-    const isFull = record
-      ? !!(record.validator1 && record.validator2)
-      : false;
+    
+    const isVal1 = record?.validator1?.toBase58() === activeAddress;
+    const isVal2 = record?.validator2?.toBase58() === activeAddress;
+    const isMyValidatorJob = !!activeAddress && (isVal1 || isVal2);
+    
+    const isFull = isValidationFull(record);
+    const isLockedOut = isFull;
+    const badgeLabel = statusBadgeLabel(record, bounty);
+    const badgeClass = statusBadgeClass(record, bounty);
+    
+    const hasVoted = isVal1 ? record?.attestationId1 !== null : (isVal2 ? record?.attestationId2 !== null : false);
+    
+    let btnText = 'Review Job';
+    if (isLockedOut) btnText = 'Full — Verifying';
+    else if (isMyValidatorJob && !hasVoted) btnText = 'Complete Validation';
+    else if (isMyValidatorJob && hasVoted) btnText = 'Validation Submitted';
 
     return (
       <motion.div
@@ -104,20 +156,25 @@ export default function ValidatePage() {
         initial={isHorizontal ? { opacity: 0, x: 20 } : { opacity: 0, y: 16 }}
         animate={isHorizontal ? { opacity: 1, x: 0 } : { opacity: 1, y: 0 }}
         transition={{ delay: i * 0.05 }}
-        onClick={() => router.push(`/app/validate/${pda}`)}
-        className={`bg-white border border-stone-200 p-6 cursor-pointer hover:shadow-md hover:border-stone-300 transition-all group ${
+        onClick={() => !isLockedOut && router.push(`/app/validate/${pda}`)}
+        className={`bg-white border border-stone-200 p-6 ${isLockedOut ? 'cursor-not-allowed opacity-80' : 'cursor-pointer hover:shadow-md hover:border-stone-300'} transition-all group ${
           isHorizontal 
             ? 'flex-shrink-0 w-80 rounded-[24px] flex flex-col' 
             : 'rounded-[28px]'
         }`}
       >
         {/* Title */}
-        <h3 className="font-semibold text-ink text-base mb-4 line-clamp-2 group-hover:text-violet-700 transition-colors">
+        <h3 className={`font-semibold text-ink text-base mb-4 line-clamp-2 transition-colors ${!isLockedOut ? 'group-hover:text-violet-700' : ''}`}>
           {title}
         </h3>
 
         {/* Meta */}
         <div className={`space-y-2 mb-5 ${isHorizontal ? 'mt-auto' : ''}`}>
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <span className={`px-2.5 py-1 rounded-full text-[10px] uppercase tracking-widest ${badgeClass}`}>
+              {badgeLabel}
+            </span>
+          </div>
           <div className="flex items-center gap-2 text-sm text-stone-500">
             <Languages size={13} />
             <span>{bounty.targetLanguage}</span>
@@ -138,12 +195,11 @@ export default function ValidatePage() {
 
         {/* CTA */}
         <button
-          onClick={(e) => { e.stopPropagation(); router.push(`/app/validate/${pda}`); }}
-          disabled={isFull}
-          className="w-full mt-auto py-2.5 rounded-xl text-sm font-semibold transition-colors
-            bg-ink text-parchment hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+          onClick={(e) => { e.stopPropagation(); if (!isLockedOut) router.push(`/app/validate/${pda}`); }}
+          disabled={isLockedOut || (isMyValidatorJob && hasVoted)}
+          className="w-full mt-auto py-2.5 rounded-xl text-sm font-semibold transition-colors bg-ink text-parchment hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {isFull ? 'Full — Verifying' : 'Review Job'}
+          {btnText}
         </button>
       </motion.div>
     );
@@ -172,7 +228,7 @@ export default function ValidatePage() {
               <div className="flex items-center justify-between mb-5">
                 <h2 className="text-2xl text-ink font-serif italic">Your Translated Articles</h2>
                 <span className="text-xs uppercase tracking-widest text-stone-400 font-medium">
-                  Awaiting Validation
+                  Live queue
                 </span>
               </div>
               <div className="flex gap-4 overflow-x-auto pb-4 -mx-2 px-2 scrollbar-none">

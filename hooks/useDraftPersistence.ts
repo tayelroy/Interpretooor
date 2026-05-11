@@ -344,6 +344,31 @@ export function useDraftPersistence(walletAddress?: string, editor?: LexicalEdit
     }
   }, [walletAddress, updateCache]);
 
+  const deleteDraft = useCallback(async () => {
+    if (typeof window === 'undefined' || !walletAddress || !activeDraftId) return;
+    try {
+      const res = await fetch(`/api/drafts/${activeDraftId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet: walletAddress }),
+      });
+      if (res.ok) {
+        window.localStorage.removeItem(draftCacheKey(walletAddress));
+        const listRes = await fetch(`/api/drafts?wallet=${walletAddress}`);
+        if (listRes.ok) {
+          const list = await listRes.json();
+          setSavedDrafts(list.map((d: any) => ({
+            key: d.id,
+            title: d.title,
+            updatedAt: d.updated_at,
+          })));
+        }
+      }
+    } catch (e) {
+      console.error('Failed to delete draft', e);
+    }
+  }, [walletAddress, activeDraftId]);
+
   return {
     isReady,
     draft,
@@ -357,5 +382,6 @@ export function useDraftPersistence(walletAddress?: string, editor?: LexicalEdit
     clearDraft,
     getSavedDraftKeys,
     loadDraftByKey,
+    deleteDraft,
   };
 }

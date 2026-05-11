@@ -4,82 +4,70 @@
     "name": "translation_bounty",
     "version": "0.1.0",
     "spec": "0.1.0",
-    "description": "Translation bounty escrow with validator staking and AI oracle disputes"
+    "description": "Translation bounty escrow program with 48-hour optimistic review window"
   },
   "instructions": [
     {
-      "name": "stake",
+      "name": "cancel_bounty",
       "discriminator": [
-        206,
-        176,
-        202,
-        18,
-        200,
-        209,
-        179,
-        108
+        79,
+        65,
+        107,
+        143,
+        128,
+        165,
+        135,
+        46
       ],
       "accounts": [
         {
-          "name": "validator",
+          "name": "author",
           "writable": true,
           "signer": true
         },
         {
-          "name": "stakeAccount",
+          "name": "bounty_account",
           "writable": true,
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
-                  118,
-                  97,
-                  108,
-                  105,
-                  100,
-                  97,
-                  116,
+                  98,
                   111,
-                  114,
-                  95,
-                  115,
+                  117,
+                  110,
                   116,
-                  97,
-                  107,
-                  101
+                  121
                 ]
               },
               {
                 "kind": "account",
-                "path": "validator"
+                "path": "bounty_account.author",
+                "account": "BountyAccount"
+              },
+              {
+                "kind": "account",
+                "path": "bounty_account.nonce",
+                "account": "BountyAccount"
               }
             ]
           }
         },
         {
-          "name": "stakeVault",
+          "name": "vault",
           "writable": true,
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
-                  118,
-                  97,
-                  108,
-                  105,
-                  100,
-                  97,
-                  116,
+                  98,
                   111,
-                  114,
-                  95,
-                  115,
+                  117,
+                  110,
                   116,
-                  97,
-                  107,
-                  101,
+                  121,
                   95,
                   118,
                   97,
@@ -90,92 +78,84 @@
               },
               {
                 "kind": "account",
-                "path": "validator"
+                "path": "bounty_account"
               }
             ]
           }
         },
         {
-          "name": "validatorTokenAccount",
+          "name": "author_token_account",
           "writable": true
         },
         {
-          "name": "usdcMint"
+          "name": "usdc_mint"
         },
         {
-          "name": "tokenProgram"
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
         {
-          "name": "systemProgram"
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
-      "args": [
-        {
-          "name": "amount",
-          "type": "u64"
-        }
-      ]
+      "args": []
     },
     {
-      "name": "requestUnstake",
+      "name": "claim_bounty",
       "discriminator": [
-        44,
-        154,
-        110,
-        253,
-        160,
-        202,
-        54,
-        34
+        225,
+        157,
+        163,
+        238,
+        239,
+        169,
+        75,
+        226
       ],
       "accounts": [
         {
-          "name": "validator",
+          "name": "translator",
           "writable": true,
           "signer": true
         },
         {
-          "name": "stakeAccount",
+          "name": "bounty_account",
           "writable": true,
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
-                  118,
-                  97,
-                  108,
-                  105,
-                  100,
-                  97,
-                  116,
+                  98,
                   111,
-                  114,
-                  95,
-                  115,
+                  117,
+                  110,
                   116,
-                  97,
-                  107,
-                  101
+                  121
                 ]
               },
               {
                 "kind": "account",
-                "path": "validator"
+                "path": "bounty_account.author",
+                "account": "BountyAccount"
+              },
+              {
+                "kind": "account",
+                "path": "bounty_account.nonce",
+                "account": "BountyAccount"
               }
             ]
           }
         }
       ],
-      "args": [
-        {
-          "name": "amount",
-          "type": "u64"
-        }
-      ]
+      "args": []
     },
     {
-      "name": "completeUnstake",
+      "name": "complete_unstake",
+      "docs": [
+        "Withdraw previously queued USDC after the 3-day lockup has elapsed."
+      ],
       "discriminator": [
         79,
         98,
@@ -193,7 +173,7 @@
           "signer": true
         },
         {
-          "name": "stakeAccount",
+          "name": "stake_account",
           "writable": true,
           "pda": {
             "seeds": [
@@ -225,7 +205,7 @@
           }
         },
         {
-          "name": "stakeVault",
+          "name": "stake_vault",
           "writable": true,
           "pda": {
             "seeds": [
@@ -263,20 +243,165 @@
           }
         },
         {
-          "name": "validatorTokenAccount",
+          "name": "validator_token_account",
           "writable": true
         },
         {
-          "name": "usdcMint"
+          "name": "stake_mint"
         },
         {
-          "name": "tokenProgram"
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         }
       ],
       "args": []
     },
     {
-      "name": "initializeBounty",
+      "name": "dispute_bounty",
+      "discriminator": [
+        240,
+        83,
+        213,
+        95,
+        60,
+        48,
+        48,
+        29
+      ],
+      "accounts": [
+        {
+          "name": "author",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "bounty_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  117,
+                  110,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "bounty_account.author",
+                "account": "BountyAccount"
+              },
+              {
+                "kind": "account",
+                "path": "bounty_account.nonce",
+                "account": "BountyAccount"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "execute_payout",
+      "docs": [
+        "Legacy crank — still valid for PendingReview bounties created before",
+        "the AwaitingValidation upgrade. New bounties skip this path entirely."
+      ],
+      "discriminator": [
+        12,
+        35,
+        52,
+        7,
+        95,
+        19,
+        169,
+        21
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "bounty_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  117,
+                  110,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "bounty_account.author",
+                "account": "BountyAccount"
+              },
+              {
+                "kind": "account",
+                "path": "bounty_account.nonce",
+                "account": "BountyAccount"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  117,
+                  110,
+                  116,
+                  121,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "bounty_account"
+              }
+            ]
+          }
+        },
+        {
+          "name": "translator_token_account",
+          "writable": true
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize_bounty",
       "discriminator": [
         150,
         37,
@@ -294,7 +419,7 @@
           "signer": true
         },
         {
-          "name": "bountyAccount",
+          "name": "bounty_account",
           "writable": true,
           "pda": {
             "seeds": [
@@ -344,29 +469,32 @@
               },
               {
                 "kind": "account",
-                "path": "bountyAccount"
+                "path": "bounty_account"
               }
             ]
           }
         },
         {
-          "name": "authorTokenAccount",
+          "name": "author_token_account",
           "writable": true
         },
         {
-          "name": "usdcMint"
+          "name": "usdc_mint"
         },
         {
           "name": "admin"
         },
         {
-          "name": "tokenProgram"
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
         {
-          "name": "systemProgram"
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         },
         {
-          "name": "rent"
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
         }
       ],
       "args": [
@@ -375,68 +503,72 @@
           "type": "u64"
         },
         {
-          "name": "originalTxId",
+          "name": "original_tx_id",
           "type": "string"
         },
         {
-          "name": "rewardAmount",
+          "name": "reward_amount",
           "type": "u64"
         },
         {
-          "name": "targetLanguage",
+          "name": "target_language",
           "type": "string"
         }
       ]
     },
     {
-      "name": "claimBounty",
-      "discriminator": [
-        225,
-        157,
-        163,
-        238,
-        239,
-        169,
-        75,
-        226
+      "name": "register_validator",
+      "docs": [
+        "First-come first-served validator registration.",
+        "Requires sufficient unlocked stake in the validator's persistent stake vault.",
+        "No USDC is moved — stake is locked in place via the `locked` counter."
       ],
-      "accounts": [
-        {
-          "name": "translator",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "bountyAccount",
-          "writable": true
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "submitTranslation",
       "discriminator": [
+        118,
+        98,
+        251,
+        58,
         81,
-        102,
-        132,
-        141,
-        169,
-        255,
-        243,
-        13
+        30,
+        13,
+        240
       ],
       "accounts": [
         {
-          "name": "translator",
+          "name": "validator",
           "writable": true,
           "signer": true
         },
         {
-          "name": "bountyAccount",
-          "writable": true
+          "name": "bounty_account",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  117,
+                  110,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "bounty_account.author",
+                "account": "BountyAccount"
+              },
+              {
+                "kind": "account",
+                "path": "bounty_account.nonce",
+                "account": "BountyAccount"
+              }
+            ]
+          }
         },
         {
-          "name": "validationRecord",
+          "name": "validation_record",
           "writable": true,
           "pda": {
             "seeds": [
@@ -457,158 +589,115 @@
               },
               {
                 "kind": "account",
-                "path": "bountyAccount"
+                "path": "bounty_account"
               }
             ]
           }
         },
         {
-          "name": "systemProgram"
-        }
-      ],
-      "args": [
-        {
-          "name": "translatedTxId",
-          "type": "string"
-        }
-      ]
-    },
-    {
-      "name": "registerValidator",
-      "discriminator": [
-        118,
-        98,
-        251,
-        58,
-        81,
-        30,
-        13,
-        240
-      ],
-      "accounts": [
-        {
-          "name": "validator",
+          "name": "validator_stake_account",
           "writable": true,
-          "signer": true
-        },
-        {
-          "name": "bountyAccount"
-        },
-        {
-          "name": "validationRecord",
-          "writable": true
-        },
-        {
-          "name": "validatorStakeAccount",
-          "writable": true
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "submitValidatorAttestation",
-      "discriminator": [
-        152,
-        49,
-        187,
-        151,
-        107,
-        143,
-        41,
-        218
-      ],
-      "accounts": [
-        {
-          "name": "validator",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "bountyAccount",
-          "writable": true
-        },
-        {
-          "name": "validationRecord",
-          "writable": true
-        },
-        {
-          "name": "vault",
-          "writable": true
-        },
-        {
-          "name": "validator1TokenAccount",
-          "writable": true
-        },
-        {
-          "name": "validator2TokenAccount",
-          "writable": true
-        },
-        {
-          "name": "authorTokenAccount",
-          "writable": true
-        },
-        {
-          "name": "protocolTokenAccount",
-          "writable": true
-        },
-        {
-          "name": "validator1StakeAccount",
-          "writable": true
-        },
-        {
-          "name": "validator2StakeAccount",
-          "writable": true
-        },
-        {
-          "name": "usdcMint"
-        },
-        {
-          "name": "tokenProgram"
-        }
-      ],
-      "args": [
-        {
-          "name": "attestationIdHash",
-          "type": {
-            "array": [
-              "u8",
-              32
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  108,
+                  105,
+                  100,
+                  97,
+                  116,
+                  111,
+                  114,
+                  95,
+                  115,
+                  116,
+                  97,
+                  107,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "validator"
+              }
             ]
           }
-        },
-        {
-          "name": "approve",
-          "type": "bool"
-        }
-      ]
-    },
-    {
-      "name": "disputeBounty",
-      "discriminator": [
-        240,
-        83,
-        213,
-        95,
-        60,
-        48,
-        48,
-        29
-      ],
-      "accounts": [
-        {
-          "name": "author",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "bountyAccount",
-          "writable": true
         }
       ],
       "args": []
     },
     {
-      "name": "resolveDispute",
+      "name": "request_unstake",
+      "docs": [
+        "Begin the 3-day unstake cooldown for `amount` USDC.",
+        "Only one pending unstake request at a time."
+      ],
+      "discriminator": [
+        44,
+        154,
+        110,
+        253,
+        160,
+        202,
+        54,
+        34
+      ],
+      "accounts": [
+        {
+          "name": "validator",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "stake_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  108,
+                  105,
+                  100,
+                  97,
+                  116,
+                  111,
+                  114,
+                  95,
+                  115,
+                  116,
+                  97,
+                  107,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "validator"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "resolve_dispute",
+      "docs": [
+        "Called by the backend AI oracle keypair to resolve a split-vote dispute.",
+        "`approve = true` means the approving validator was correct; `false` means the rejecter.",
+        "Slashes the incorrect validator's stake vault and drains the bounty vault 100%."
+      ],
       "discriminator": [
         231,
         6,
@@ -626,46 +715,142 @@
           "signer": true
         },
         {
-          "name": "bountyAccount",
-          "writable": true
+          "name": "bounty_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  117,
+                  110,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "bounty_account.author",
+                "account": "BountyAccount"
+              },
+              {
+                "kind": "account",
+                "path": "bounty_account.nonce",
+                "account": "BountyAccount"
+              }
+            ]
+          }
         },
         {
-          "name": "validationRecord",
-          "writable": true
+          "name": "validation_record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  108,
+                  105,
+                  100,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "bounty_account"
+              }
+            ]
+          }
         },
         {
           "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  117,
+                  110,
+                  116,
+                  121,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "bounty_account"
+              }
+            ]
+          }
+        },
+        {
+          "name": "correct_validator_stake_acc",
+          "docs": [
+            "The stake account of the validator who voted correctly"
+          ],
           "writable": true
         },
         {
-          "name": "correctValidatorStakeAcc",
+          "name": "incorrect_validator_stake_acc",
+          "docs": [
+            "The stake account of the validator who voted incorrectly (to be slashed)"
+          ],
           "writable": true
         },
         {
-          "name": "incorrectValidatorStakeAcc",
+          "name": "incorrect_validator_stake_vault",
+          "docs": [
+            "The stake vault of the incorrect validator (USDC/kUSDC transferred from here)"
+          ],
           "writable": true
         },
         {
-          "name": "incorrectValidatorStakeVault",
+          "name": "correct_validator_token_account",
+          "docs": [
+            "The ATA of the correct validator (receives bounty share in USDC)"
+          ],
           "writable": true
         },
         {
-          "name": "correctValidatorTokenAccount",
+          "name": "correct_validator_stake_token_account",
+          "docs": [
+            "The ATA of the correct validator for stake tokens (receives slashed stake in kUSDC)"
+          ],
           "writable": true
         },
         {
-          "name": "authorTokenAccount",
+          "name": "author_token_account",
           "writable": true
         },
         {
-          "name": "protocolTokenAccount",
+          "name": "protocol_token_account",
           "writable": true
         },
         {
-          "name": "usdcMint"
+          "name": "usdc_mint"
         },
         {
-          "name": "tokenProgram"
+          "name": "stake_mint"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         }
       ],
       "args": [
@@ -676,101 +861,388 @@
       ]
     },
     {
-      "name": "cancelBounty",
+      "name": "stake",
+      "docs": [
+        "Deposit USDC into the validator's persistent stake vault.",
+        "Initialises the stake account and vault on first call (init_if_needed)."
+      ],
       "discriminator": [
-        79,
-        65,
-        107,
-        143,
-        128,
-        165,
-        135,
-        46
+        206,
+        176,
+        202,
+        18,
+        200,
+        209,
+        179,
+        108
       ],
       "accounts": [
         {
-          "name": "author",
+          "name": "validator",
           "writable": true,
           "signer": true
         },
         {
-          "name": "bountyAccount",
+          "name": "stake_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  108,
+                  105,
+                  100,
+                  97,
+                  116,
+                  111,
+                  114,
+                  95,
+                  115,
+                  116,
+                  97,
+                  107,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "validator"
+              }
+            ]
+          }
+        },
+        {
+          "name": "stake_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  108,
+                  105,
+                  100,
+                  97,
+                  116,
+                  111,
+                  114,
+                  95,
+                  115,
+                  116,
+                  97,
+                  107,
+                  101,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "validator"
+              }
+            ]
+          }
+        },
+        {
+          "name": "validator_token_account",
           "writable": true
         },
         {
-          "name": "vault",
-          "writable": true
+          "name": "stake_mint"
         },
         {
-          "name": "authorTokenAccount",
-          "writable": true
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
         {
-          "name": "usdcMint"
-        },
-        {
-          "name": "tokenProgram"
-        },
-        {
-          "name": "systemProgram"
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
     },
     {
-      "name": "executePayout",
+      "name": "submit_translation",
+      "docs": [
+        "AI node submits finished translation. Initialises ValidationRecord and sets",
+        "status to AwaitingValidation — two validators must attest before payout."
+      ],
       "discriminator": [
-        12,
-        35,
-        52,
-        7,
-        95,
-        19,
+        81,
+        102,
+        132,
+        141,
         169,
-        21
+        255,
+        243,
+        13
       ],
       "accounts": [
         {
-          "name": "cranker",
+          "name": "translator",
           "writable": true,
           "signer": true
         },
         {
-          "name": "bountyAccount",
-          "writable": true
+          "name": "bounty_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  117,
+                  110,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "bounty_account.author",
+                "account": "BountyAccount"
+              },
+              {
+                "kind": "account",
+                "path": "bounty_account.nonce",
+                "account": "BountyAccount"
+              }
+            ]
+          }
+        },
+        {
+          "name": "validation_record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  108,
+                  105,
+                  100,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "bounty_account"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "translated_tx_id",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "submit_validator_attestation",
+      "docs": [
+        "Validator submits their Sign Protocol attestation hash and vote.",
+        "On the second vote:",
+        "- both approve → unlock stake, pay 40/40/20 from bounty vault",
+        "- both reject  → unlock stake, pay 2/2/96 from bounty vault, status = Rejected",
+        "- split        → status = Disputed (AI oracle resolves via resolve_dispute)"
+      ],
+      "discriminator": [
+        152,
+        49,
+        187,
+        151,
+        107,
+        143,
+        41,
+        218
+      ],
+      "accounts": [
+        {
+          "name": "validator",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "bounty_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  117,
+                  110,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "bounty_account.author",
+                "account": "BountyAccount"
+              },
+              {
+                "kind": "account",
+                "path": "bounty_account.nonce",
+                "account": "BountyAccount"
+              }
+            ]
+          }
+        },
+        {
+          "name": "validation_record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  108,
+                  105,
+                  100,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "bounty_account"
+              }
+            ]
+          }
         },
         {
           "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  117,
+                  110,
+                  116,
+                  121,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "bounty_account"
+              }
+            ]
+          }
+        },
+        {
+          "name": "validator_1_token_account",
+          "docs": [
+            "Validator 1 USDC ATA — ownership verified in instruction body at payout time"
+          ],
           "writable": true
         },
         {
-          "name": "translatorTokenAccount",
+          "name": "validator_2_token_account",
+          "docs": [
+            "Validator 2 USDC ATA — ownership verified in instruction body at payout time"
+          ],
           "writable": true
         },
         {
-          "name": "usdcMint"
+          "name": "author_token_account",
+          "docs": [
+            "Author USDC ATA — for both-reject refund"
+          ],
+          "writable": true
         },
         {
-          "name": "tokenProgram"
+          "name": "protocol_token_account",
+          "docs": [
+            "Protocol fee recipient — 20%"
+          ],
+          "writable": true
+        },
+        {
+          "name": "validator_1_stake_account",
+          "docs": [
+            "Validator 1 stake account — verified against validation_record.validator_1 in instruction"
+          ],
+          "writable": true
+        },
+        {
+          "name": "validator_2_stake_account",
+          "docs": [
+            "Validator 2 stake account — verified against validation_record.validator_2 in instruction"
+          ],
+          "writable": true
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "attestation_id_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "approve",
+          "type": "bool"
+        }
+      ]
     }
   ],
   "accounts": [
-    {
-      "name": "ValidatorStakeAccount",
-      "discriminator": [
-        190,
-        106,
-        151,
-        136,
-        83,
-        74,
-        78,
-        178
-      ]
-    },
     {
       "name": "BountyAccount",
       "discriminator": [
@@ -796,207 +1268,19 @@
         178,
         215
       ]
-    }
-  ],
-  "types": [
+    },
     {
       "name": "ValidatorStakeAccount",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "owner",
-            "type": "pubkey"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          },
-          {
-            "name": "locked",
-            "type": "u64"
-          },
-          {
-            "name": "unlockAt",
-            "type": "i64"
-          },
-          {
-            "name": "unlockAmount",
-            "type": "u64"
-          },
-          {
-            "name": "bump",
-            "type": "u8"
-          },
-          {
-            "name": "vaultBump",
-            "type": "u8"
-          }
-        ]
-      }
-    },
-    {
-      "name": "BountyAccount",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "author",
-            "type": "pubkey"
-          },
-          {
-            "name": "translator",
-            "type": {
-              "option": "pubkey"
-            }
-          },
-          {
-            "name": "admin",
-            "type": "pubkey"
-          },
-          {
-            "name": "rewardAmount",
-            "type": "u64"
-          },
-          {
-            "name": "originalTxId",
-            "type": "string"
-          },
-          {
-            "name": "targetLanguage",
-            "type": "string"
-          },
-          {
-            "name": "translatedTxId",
-            "type": {
-              "option": "string"
-            }
-          },
-          {
-            "name": "submissionTimestamp",
-            "type": "i64"
-          },
-          {
-            "name": "status",
-            "type": {
-              "defined": {
-                "name": "BountyStatus"
-              }
-            }
-          },
-          {
-            "name": "nonce",
-            "type": "u64"
-          },
-          {
-            "name": "bump",
-            "type": "u8"
-          },
-          {
-            "name": "vaultBump",
-            "type": "u8"
-          }
-        ]
-      }
-    },
-    {
-      "name": "ValidationRecord",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "bounty",
-            "type": "pubkey"
-          },
-          {
-            "name": "validator1",
-            "type": {
-              "option": "pubkey"
-            }
-          },
-          {
-            "name": "validator2",
-            "type": {
-              "option": "pubkey"
-            }
-          },
-          {
-            "name": "attestationId1",
-            "type": {
-              "option": {
-                "array": [
-                  "u8",
-                  32
-                ]
-              }
-            }
-          },
-          {
-            "name": "attestationId2",
-            "type": {
-              "option": {
-                "array": [
-                  "u8",
-                  32
-                ]
-              }
-            }
-          },
-          {
-            "name": "vote1",
-            "type": {
-              "option": "bool"
-            }
-          },
-          {
-            "name": "vote2",
-            "type": {
-              "option": "bool"
-            }
-          },
-          {
-            "name": "bump",
-            "type": "u8"
-          },
-          {
-            "name": "validator1Stake",
-            "type": "u64"
-          },
-          {
-            "name": "validator2Stake",
-            "type": "u64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "BountyStatus",
-      "type": {
-        "kind": "enum",
-        "variants": [
-          {
-            "name": "Open"
-          },
-          {
-            "name": "Claimed"
-          },
-          {
-            "name": "PendingReview"
-          },
-          {
-            "name": "AwaitingValidation"
-          },
-          {
-            "name": "Disputed"
-          },
-          {
-            "name": "Paid"
-          },
-          {
-            "name": "Rejected"
-          }
-        ]
-      }
+      "discriminator": [
+        190,
+        106,
+        151,
+        136,
+        83,
+        74,
+        78,
+        178
+      ]
     }
   ],
   "errors": [
@@ -1094,6 +1378,215 @@
       "code": 6018,
       "name": "MathOverflow",
       "msg": "Arithmetic overflow"
+    }
+  ],
+  "types": [
+    {
+      "name": "BountyAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "author",
+            "type": "pubkey"
+          },
+          {
+            "name": "translator",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "reward_amount",
+            "type": "u64"
+          },
+          {
+            "name": "original_tx_id",
+            "type": "string"
+          },
+          {
+            "name": "target_language",
+            "type": "string"
+          },
+          {
+            "name": "translated_tx_id",
+            "type": {
+              "option": "string"
+            }
+          },
+          {
+            "name": "submission_timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "BountyStatus"
+              }
+            }
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "vault_bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BountyStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Open"
+          },
+          {
+            "name": "Claimed"
+          },
+          {
+            "name": "PendingReview"
+          },
+          {
+            "name": "AwaitingValidation"
+          },
+          {
+            "name": "Disputed"
+          },
+          {
+            "name": "Paid"
+          },
+          {
+            "name": "Rejected"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ValidationRecord",
+      "docs": [
+        "Validator consensus state — separate PDA to avoid resizing BountyAccount.",
+        "Seeds: [\"validation\", bounty_account_pubkey]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "bounty",
+            "type": "pubkey"
+          },
+          {
+            "name": "validator_1",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "validator_2",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "attestation_id_1",
+            "type": {
+              "option": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            }
+          },
+          {
+            "name": "attestation_id_2",
+            "type": {
+              "option": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            }
+          },
+          {
+            "name": "vote_1",
+            "type": {
+              "option": "bool"
+            }
+          },
+          {
+            "name": "vote_2",
+            "type": {
+              "option": "bool"
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "validator_1_stake",
+            "type": "u64"
+          },
+          {
+            "name": "validator_2_stake",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ValidatorStakeAccount",
+      "docs": [
+        "Persistent stake account for a validator. One per wallet, lives until explicitly closed.",
+        "USDC physically held in the paired ValidatorStakeVault token account."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "locked",
+            "type": "u64"
+          },
+          {
+            "name": "unlock_at",
+            "type": "i64"
+          },
+          {
+            "name": "unlock_amount",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "vault_bump",
+            "type": "u8"
+          }
+        ]
+      }
     }
   ]
 }

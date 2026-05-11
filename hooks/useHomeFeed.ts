@@ -4,6 +4,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { parseMdh } from '@/lib/mdh-utils';
 import { parseMdhBlocks } from '@/lib/mdh-block-parser';
 import { stripTags } from '@/lib/mdh-utils';
+import * as anchor from '@coral-xyz/anchor';
+import { Connection, PublicKey, Keypair } from '@solana/web3.js';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const BOUNTY_IDL = require('../lib/idl/translation_bounty.json');
 
 export interface HomeFeedPost {
   assetId: string;
@@ -16,6 +20,7 @@ export interface HomeFeedPost {
   tagCount: number;
   tagKeys: string[];
   timestamp?: number;
+  isTranslation?: boolean;
 }
 
 const ARWEAVE_GRAPHQL =
@@ -31,7 +36,7 @@ const FEED_QUERY = `
         { name: "App-Name",       values: ["Interpretooor"] }
         { name: "Content-Format", values: ["mdh"] }
         { name: "Program-ID",     values: [$programId] }
-        { name: "Doc-Type",       values: ["article"] }
+        { name: "Doc-Type",       values: ["article", "translation"] }
       ]
       first: $first
       order: DESC
@@ -84,8 +89,27 @@ export function useHomeFeed() {
     setLoading(true);
     setError(null);
     try {
-      // Query Arweave GraphQL for all transactions tagged App-Name=Interpretooor + Content-Format=mdh.
-      // This is the authoritative source — the relayer sets these tags on every upload.
+      // 1. Fetch all bounties to know which translations are Paid
+      const connection = new Connection(process.env.NEXT_PUBLIC_HELIUS_RPC_URL!, 'confirmed');
+      const dummyKey = Keypair.generate();
+      const dummyWallet = {
+        publicKey: dummyKey.publicKey,
+        signTransaction: async <T>(tx: T) => tx,
+        signAllTransactions: async <T>(txs: T[]) => txs,
+      };
+      const provider = new anchor.AnchorProvider(connection, dummyWallet as any, { commitment: 'confirmed' });
+      const idl = { ...(BOUNTY_IDL as any), address: PROGRAM_ID };
+      const program = new anchor.Program(idl as any, provider);
+      
+      const allBounties = await (program.account as any).bountyAccount.all();
+      const paidTranslationIds = new Set<string>();
+      allBounties.forEach((b: any) => {
+        if ('paid' in b.account.status && b.account.translatedTxId) {
+          paidTranslationIds.add(b.account.translatedTxId);
+        }
+      });
+
+      // 2. Query Arweave
       const gqlRes = await fetch(ARWEAVE_GRAPHQL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -105,8 +129,13 @@ export function useHomeFeed() {
         edges.map(async ({ node }): Promise<HomeFeedPost | null> => {
           const txId = node.id;
           const uploader = node.tags.find((t) => t.name === 'Uploader')?.value ?? '';
+          const docType = node.tags.find((t) => t.name === 'Doc-Type')?.value ?? 'article';
           const timestampTag = node.tags.find((t) => t.name === 'Timestamp')?.value;
           const timestamp = timestampTag ? parseInt(timestampTag, 10) : undefined;
+          
+          if (docType === 'translation' && !paidTranslationIds.has(txId)) {
+            return null; // Not verified yet, do not show on home page
+          }
 
           let title = '';
           let excerpt = '';
@@ -141,6 +170,7 @@ export function useHomeFeed() {
             tagCount,
             tagKeys,
             timestamp,
+            isTranslation: docType === 'translation',
           };
         })
       );

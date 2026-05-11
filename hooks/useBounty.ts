@@ -202,10 +202,6 @@ export function useBounty() {
 
   // ── Sponsor upload via the backend relayer ──────────────────────────────────
 
-  /**
-   * Uploads a raw .mdh string to Arweave via the platform relayer.
-   * Returns the Irys transaction ID.
-   */
   const sponsorUpload = useCallback(
     async (mdhContent: string): Promise<string> => {
       const activeWallet = solanaWallets[0];
@@ -218,6 +214,7 @@ export function useBounty() {
           headers: {
             'Content-Type': 'text/plain',
             'X-Uploader-Address': activeWallet.address,
+            'X-Doc-Type': 'translation',
           },
           body: mdhContent,
         }
@@ -589,7 +586,10 @@ export function useBounty() {
       const valid = mapped.filter(isValidBountyAccount);
 
       if (!statusFilter) return valid;
-      return valid.filter((b: BountyAccount) => statusFilter in b.status);
+      const filtered = valid.filter((b: BountyAccount) => statusFilter in b.status);
+      const dropped = valid.filter((b: BountyAccount) => !(statusFilter in b.status));
+      if (dropped.length) console.log('[fetchAllBounties] filtered out:', dropped.map(b => ({ pda: b.publicKey.toBase58().slice(0,8), status: JSON.stringify(b.status) })));
+      return filtered;
     },
     [buildReadOnlyProgram]
   );

@@ -320,8 +320,9 @@ pub mod translation_bounty {
                 r.validator_1.map_or(false, |v| v == ctx.accounts.validator_1_stake_account.owner),
                 BountyError::InvalidValidatorAccount
             );
+            // validator_2 may not have registered yet on the first attestation — skip check
             require!(
-                r.validator_2.map_or(false, |v| v == ctx.accounts.validator_2_stake_account.owner),
+                r.validator_2.map_or(true, |v| v == ctx.accounts.validator_2_stake_account.owner),
                 BountyError::InvalidValidatorAccount
             );
             (r.validator_1_stake, r.validator_2_stake)
@@ -370,7 +371,7 @@ pub mod translation_bounty {
                     .locked
                     .saturating_sub(v2_stake);
 
-                // Drain bounty vault: 40% / 40% / 20%
+                // Drain bounty vault: 40% v1 / 40% v2 / 20% protocol (AI node fee included)
                 let v_share = reward_amount * 40 / 100;
                 let protocol_share = reward_amount.saturating_sub(v_share * 2);
 
@@ -1093,14 +1094,14 @@ pub struct SubmitValidatorAttestation<'info> {
         seeds = [b"bounty", bounty_account.author.as_ref(), &bounty_account.nonce.to_le_bytes()],
         bump = bounty_account.bump,
     )]
-    pub bounty_account: Account<'info, BountyAccount>,
+    pub bounty_account: Box<Account<'info, BountyAccount>>,
 
     #[account(
         mut,
         seeds = [b"validation", bounty_account.key().as_ref()],
         bump = validation_record.bump,
     )]
-    pub validation_record: Account<'info, ValidationRecord>,
+    pub validation_record: Box<Account<'info, ValidationRecord>>,
 
     #[account(
         mut,
@@ -1109,15 +1110,15 @@ pub struct SubmitValidatorAttestation<'info> {
         token::mint = usdc_mint,
         token::authority = bounty_account,
     )]
-    pub vault: Account<'info, TokenAccount>,
+    pub vault: Box<Account<'info, TokenAccount>>,
 
     /// Validator 1 USDC ATA — ownership verified in instruction body at payout time
     #[account(mut, token::mint = usdc_mint)]
-    pub validator_1_token_account: Account<'info, TokenAccount>,
+    pub validator_1_token_account: Box<Account<'info, TokenAccount>>,
 
     /// Validator 2 USDC ATA — ownership verified in instruction body at payout time
     #[account(mut, token::mint = usdc_mint)]
-    pub validator_2_token_account: Account<'info, TokenAccount>,
+    pub validator_2_token_account: Box<Account<'info, TokenAccount>>,
 
     /// Author USDC ATA — for both-reject refund
     #[account(
@@ -1125,21 +1126,21 @@ pub struct SubmitValidatorAttestation<'info> {
         token::mint = usdc_mint,
         token::authority = bounty_account.author,
     )]
-    pub author_token_account: Account<'info, TokenAccount>,
+    pub author_token_account: Box<Account<'info, TokenAccount>>,
 
-    /// Protocol fee recipient
+    /// Protocol fee recipient — 20%
     #[account(mut, token::mint = usdc_mint)]
-    pub protocol_token_account: Account<'info, TokenAccount>,
+    pub protocol_token_account: Box<Account<'info, TokenAccount>>,
 
     /// Validator 1 stake account — verified against validation_record.validator_1 in instruction
     #[account(mut)]
-    pub validator_1_stake_account: Account<'info, ValidatorStakeAccount>,
+    pub validator_1_stake_account: Box<Account<'info, ValidatorStakeAccount>>,
 
     /// Validator 2 stake account — verified against validation_record.validator_2 in instruction
     #[account(mut)]
-    pub validator_2_stake_account: Account<'info, ValidatorStakeAccount>,
+    pub validator_2_stake_account: Box<Account<'info, ValidatorStakeAccount>>,
 
-    pub usdc_mint: Account<'info, Mint>,
+    pub usdc_mint: Box<Account<'info, Mint>>,
     pub token_program: Program<'info, Token>,
 }
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { motion } from 'motion/react';
 import { useParams, useRouter } from 'next/navigation';
 import { useWallets } from '@privy-io/react-auth/solana';
 import { PublicKey } from '@solana/web3.js';
@@ -124,7 +125,7 @@ export default function ValidateAssessmentPage() {
     } finally {
       setLoading(false);
     }
-  }, [bountyId, fetchBounty, fetchValidationRecord, router]);
+  }, [bountyId, fetchBounty, fetchValidationRecord, fetchStakeAccount, activeAddress, router]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -366,8 +367,8 @@ export default function ValidateAssessmentPage() {
                     <Lock size={11} />
                     <span>Stake locked: <strong>{stakeRequiredUsdc} USDC</strong> (3-day unstake period)</span>
                   </div>
-                  <p className="text-emerald-700">If correct majority: earn {reward40pctUsdc} USDC + stake stays</p>
-                  <p className="text-red-600">If wrong minority: lose {stakeRequiredUsdc} USDC stake</p>
+                  <p className="text-emerald-700">If correct validation: earn {reward40pctUsdc} USDC + stake stays</p>
+                  <p className="text-red-600">If wrong validation: lose {stakeRequiredUsdc} USDC stake</p>
                 </div>
                 <label className="flex items-center gap-2 mt-3 text-xs text-violet-700 cursor-pointer select-none">
                   <input
@@ -376,7 +377,7 @@ export default function ValidateAssessmentPage() {
                     onChange={e => setStakeAcknowledged(e.target.checked)}
                     className="rounded"
                   />
-                  I understand I risk losing my stake if I vote in the minority
+                  I understand I risk losing my stake if I validate a wrong translation
                 </label>
               </div>
               <button
@@ -423,18 +424,63 @@ export default function ValidateAssessmentPage() {
           </div>
         )}
 
-        {/* Done */}
+        {/* Done — full confirmation card */}
         {done && (
-          <div className="mb-6 flex items-center gap-3 p-5 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-700">
-            <CheckCircle2 size={18} className="shrink-0" />
-            <span className="text-sm font-medium">
-              Attestation submitted on-chain. Thank you!
-            </span>
+          <div className="max-w-xl mx-auto mt-8 mb-10">
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+              className="bg-white border border-stone-200 rounded-[32px] p-10 shadow-sm text-center"
+            >
+              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <CheckCircle2 size={32} className="text-emerald-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-ink mb-2">Attestation recorded</h2>
+              <p className="text-stone-500 text-sm mb-6 max-w-sm mx-auto">
+                Your assessment has been uploaded to Arweave and signed on-chain.
+                {overallVote
+                  ? ' If the other validator also approves, the bounty pays out automatically.'
+                  : ' If the other validator also rejects, the author is refunded. A split vote goes to the AI oracle.'}
+              </p>
+
+              {/* What happens next */}
+              <div className="bg-stone-50 rounded-2xl p-5 text-left space-y-3 mb-8">
+                <p className="text-xs uppercase tracking-widest text-stone-400 font-semibold mb-3">What happens next</p>
+                <div className="flex items-start gap-3 text-sm text-stone-600">
+                  <ShieldCheck size={15} className="text-emerald-600 mt-0.5 shrink-0" />
+                  <span><strong>Both approve</strong> — bounty vault pays out: 40% to each validator, 20% protocol fee. Translator receives their share from the locked escrow.</span>
+                </div>
+                <div className="flex items-start gap-3 text-sm text-stone-600">
+                  <ShieldX size={15} className="text-red-500 mt-0.5 shrink-0" />
+                  <span><strong>Both reject</strong> — 96% refunded to the author. Each validator earns 2% for their work. A new translation cycle begins.</span>
+                </div>
+                <div className="flex items-start gap-3 text-sm text-stone-600">
+                  <AlertCircle size={15} className="text-amber-500 mt-0.5 shrink-0" />
+                  <span><strong>Split vote</strong> — bounty enters <em>Disputed</em> state. The AI oracle reviews both assessments and resolves the outcome.</span>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => router.push('/app/validate')}
+                  className="flex-1 py-3 rounded-xl border border-stone-200 text-stone-600 text-sm font-semibold hover:bg-stone-50 transition-colors"
+                >
+                  Back to board
+                </button>
+                <button
+                  onClick={() => router.push('/app/bounty/' + bountyId)}
+                  className="flex-1 py-3 rounded-xl bg-ink text-parchment text-sm font-semibold hover:opacity-90 transition-opacity"
+                >
+                  View bounty
+                </button>
+              </div>
+            </motion.div>
           </div>
         )}
 
         {/* Two-column layout */}
-        <div className="flex flex-col xl:flex-row gap-5">
+        {!done && <div className="flex flex-col xl:flex-row gap-5">
 
           {/* Left: side-by-side original + translation */}
           <div className="xl:flex-[3] flex flex-col lg:flex-row gap-5 max-h-[calc(100vh-120px)] sticky top-6">
@@ -623,7 +669,7 @@ export default function ValidateAssessmentPage() {
               </p>
             )}
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );

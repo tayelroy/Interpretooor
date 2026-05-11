@@ -153,8 +153,8 @@ export function useValidator() {
       return {
         publicKey: validationPda,
         bounty: raw.bounty,
-        validator1: raw.validator1 ?? null,
-        validator2: raw.validator2 ?? null,
+        validator1: (!raw.validator1 || raw.validator1.equals(PublicKey.default)) ? null : raw.validator1,
+        validator2: (!raw.validator2 || raw.validator2.equals(PublicKey.default)) ? null : raw.validator2,
         attestationId1: raw.attestationId1 ?? null,
         attestationId2: raw.attestationId2 ?? null,
         vote1: raw.vote1 ?? null,
@@ -203,7 +203,7 @@ export function useValidator() {
           stakeAccount,
           stakeVault,
           validatorTokenAccount,
-          usdcMint: USDC_MINT,
+          stakeMint: USDC_MINT,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: anchor.web3.SystemProgram.programId,
         })
@@ -260,7 +260,7 @@ export function useValidator() {
           stakeAccount,
           stakeVault,
           validatorTokenAccount,
-          usdcMint: USDC_MINT,
+          stakeMint: USDC_MINT,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
         .rpc();
@@ -375,12 +375,15 @@ export function useValidator() {
       const [validationRecordPda] = deriveValidationPda(bountyPda);
       const [vault] = deriveVaultPda(bountyPda);
 
-      if (!validationRecord.validator1 || !validationRecord.validator2) {
-        throw new Error('Both validator slots must be filled before submitting attestation');
+      if (!validationRecord.validator1) {
+        throw new Error('No validators registered on this bounty');
       }
 
+      // validator2 may not have registered yet — use a placeholder so accounts are valid
+      const v2 = validationRecord.validator2 ?? validationRecord.validator1;
+
       const validator1TokenAccount = getAssociatedTokenAddressSync(USDC_MINT, validationRecord.validator1);
-      const validator2TokenAccount = getAssociatedTokenAddressSync(USDC_MINT, validationRecord.validator2);
+      const validator2TokenAccount = getAssociatedTokenAddressSync(USDC_MINT, v2);
       const authorTokenAccount = getAssociatedTokenAddressSync(USDC_MINT, bountyData.author);
 
       const adminPubkey = new PublicKey(
@@ -389,9 +392,42 @@ export function useValidator() {
       const protocolTokenAccount = getAssociatedTokenAddressSync(USDC_MINT, adminPubkey);
 
       const [validator1StakeAccount] = deriveValidatorStakePda(validationRecord.validator1);
-      const [validator2StakeAccount] = deriveValidatorStakePda(validationRecord.validator2);
+      const [validator2StakeAccount] = deriveValidatorStakePda(v2);
 
-      // ── 4. Record on-chain ────────────────────────────────────────────────
+      // ── 4. Ensure all payout ATAs exist (separate txs — bundling would exceed tx size limit) ──
+      const ataChecks: Array<{ ata: PublicKey; owner: PublicKey }> = [
+        { ata: validator1TokenAccount, owner: validationRecord.validator1 },
+        { ata: validator2TokenAccount, owner: v2 },
+        { ata: authorTokenAccount, owner: bountyData.author },
+        { ata: protocolTokenAccount, owner: adminPubkey },
+      ];
+
+      for (const { ata, owner } of ataChecks) {
+        try {
+          await getAccount(provider.connection, ata);
+        } catch {
+          console.log(`[submitAttestation] Creating missing ATA for owner ${owner.toBase58()}: ${ata.toBase58()}`);
+          const createIx = createAssociatedTokenAccountInstruction(
+            provider.wallet.publicKey,
+            ata,
+            owner,
+            USDC_MINT,
+            TOKEN_PROGRAM_ID,
+            ASSOCIATED_TOKEN_PROGRAM_ID
+          );
+          const { blockhash, lastValidBlockHeight } = await provider.connection.getLatestBlockhash();
+          const createTx = new anchor.web3.Transaction({ blockhash, lastValidBlockHeight }).add(createIx);
+          createTx.feePayer = provider.wallet.publicKey;
+          const signedCreate = await provider.wallet.signTransaction(createTx);
+          const createSig = await provider.connection.sendRawTransaction(signedCreate.serialize(), { skipPreflight: true });
+          console.log(`[submitAttestation] ATA create tx: ${createSig}`);
+          const result = await provider.connection.confirmTransaction({ signature: createSig, blockhash, lastValidBlockHeight }, 'confirmed');
+          if (result.value.err) throw new Error(`Failed to create ATA for ${owner.toBase58()}: ${JSON.stringify(result.value.err)}`);
+          console.log(`[submitAttestation] ATA confirmed: ${ata.toBase58()}`);
+        }
+      }
+
+      // ── 5. Record on-chain ────────────────────────────────────────────────
       const sig = await program.methods
         .submitValidatorAttestation(assessmentHash, approve)
         .accounts({
@@ -408,7 +444,7 @@ export function useValidator() {
           usdcMint: USDC_MINT,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
-        .rpc();
+        .rpc({ skipPreflight: true, commitment: 'confirmed' });
 
       console.log('submitValidatorAttestation tx:', sig, 'arweave:', assessmentArweaveTxId);
       return { assessmentArweaveTxId, sig };
