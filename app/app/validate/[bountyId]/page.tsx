@@ -57,6 +57,7 @@ export default function ValidateAssessmentPage() {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [stakeAcknowledged, setStakeAcknowledged] = useState(false);
+  const [showStakeWarning, setShowStakeWarning] = useState(false);
 
   // Assessment form state
   const [decisions, setDecisions] = useState<Record<number, { translatedPhrase: string; rationale: string }>>({});
@@ -145,7 +146,8 @@ export default function ValidateAssessmentPage() {
     !isRegistered &&
     record &&
     !(record.validator1 && record.validator2) &&
-    bounty?.translator?.toBase58() !== activeAddress;
+    bounty?.translator?.toBase58() !== activeAddress &&
+    bounty?.author?.toBase58() !== activeAddress;
 
   const tags: SemanticTag[] = originalParsed?.tags ?? [];
   const isDisputed = bounty && 'disputed' in bounty.status;
@@ -164,6 +166,10 @@ export default function ValidateAssessmentPage() {
 
   const handleRegister = async () => {
     if (!bounty || registering) return;
+    if (hasInsufficientStake) {
+      setShowStakeWarning(true);
+      return;
+    }
     setRegistering(true);
     try {
       await registerValidator(bounty.publicKey);
@@ -297,6 +303,35 @@ export default function ValidateAssessmentPage() {
 
   return (
     <div className="min-h-screen bg-parchment pt-32 pb-20 px-6">
+      {/* Stake Warning Modal */}
+      {showStakeWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-[28px] p-8 max-w-md w-full shadow-xl transform transition-all">
+            <div className="flex items-center gap-3 text-red-600 mb-4">
+              <AlertCircle size={28} />
+              <h2 className="text-xl font-bold">Insufficient Stake</h2>
+            </div>
+            <p className="text-stone-600 mb-6">
+              You need at least <strong>{stakeRequiredUsdc} USDC</strong> in available stake to validate this job, but you only have <strong>{(availableStake / 1_000_000).toFixed(2)} USDC</strong> available.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowStakeWarning(false)}
+                className="flex-1 py-3 px-4 rounded-xl border border-stone-200 text-stone-600 font-semibold hover:bg-stone-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <Link
+                href="/app/stake"
+                className="flex-1 py-3 px-4 rounded-xl bg-violet-700 text-white font-semibold text-center hover:bg-violet-800 transition-colors"
+              >
+                Add Stake
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-screen-xl mx-auto">
 
         {/* Nav */}
@@ -334,12 +369,6 @@ export default function ValidateAssessmentPage() {
                   <p className="text-emerald-700">If correct majority: earn {reward40pctUsdc} USDC + stake stays</p>
                   <p className="text-red-600">If wrong minority: lose {stakeRequiredUsdc} USDC stake</p>
                 </div>
-                {hasInsufficientStake && (
-                  <p className="mt-2 text-xs text-red-600 font-medium">
-                    Your stake balance is too low ({(availableStake / 1_000_000).toFixed(2)} USDC available).{' '}
-                    <Link href="/app/stake" className="underline">Add stake →</Link>
-                  </p>
-                )}
                 <label className="flex items-center gap-2 mt-3 text-xs text-violet-700 cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -352,7 +381,7 @@ export default function ValidateAssessmentPage() {
               </div>
               <button
                 onClick={handleRegister}
-                disabled={registering || !stakeAcknowledged || hasInsufficientStake}
+                disabled={registering || !stakeAcknowledged}
                 className="flex items-center gap-2 px-5 py-2.5 bg-violet-700 text-white rounded-xl text-sm font-semibold hover:bg-violet-800 transition-colors disabled:opacity-60 shrink-0 self-start mt-1"
               >
                 {registering ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
@@ -584,9 +613,13 @@ export default function ValidateAssessmentPage() {
             )}
 
             {/* Not registered yet */}
-            {!isRegistered && !canRegister && bounty.translator?.toBase58() === activeAddress && (
+            {!isRegistered && !canRegister && bounty && (
               <p className="mt-6 text-xs text-stone-400 text-center pt-4 border-t border-stone-100">
-                Translators cannot validate their own submission.
+                {bounty.author?.toBase58() === activeAddress
+                  ? "Authors cannot validate their own articles."
+                  : bounty.translator?.toBase58() === activeAddress
+                  ? "Translators cannot validate their own submission."
+                  : "You cannot validate this submission."}
               </p>
             )}
           </div>
